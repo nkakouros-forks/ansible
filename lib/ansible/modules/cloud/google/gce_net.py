@@ -313,7 +313,6 @@ def check_libcloud():
         )
 
 
-
 ################################################################################
 # Main
 ################################################################################
@@ -361,61 +360,61 @@ def main():
         'subnet_desc'   : module.params['subnet_desc'],
     }
 
-    json_output = {'state': state}
+    json_output = {'state': params['state']}
 
-    if state in ['active', 'present']:
+    if params['state'] in ['active', 'present']:
         network = None
         subnet = None
         try:
-            network = gce.ex_get_network(name)
+            network = gce.ex_get_network(params['name'])
         except ResourceNotFoundError:
             pass
         else:
-            json_output['name'] = name
-            if mode == 'legacy':
+            json_output['name'] = params['name']
+            if params['mode'] == 'legacy':
                 json_output['ipv4_range'] = network.cidr
-            if mode == 'custom' and subnet_name:
+            if params['mode'] == 'custom' and params['subnet_name']:
                 try:
-                    subnet = gce.ex_get_subnetwork(subnet_name, region=subnet_region)
+                    subnet = gce.ex_get_subnetwork(params['subnet_name'], region=params['subnet_region'])
                 except ResourceNotFoundError:
                     pass
                 else:
-                    json_output['subnet_name'] = subnet_name
+                    json_output['subnet_name'] = params['subnet_name']
                     json_output['ipv4_range'] = subnet.cidr
 
         # user wants to create a new network that doesn't yet exist
-        if name and not network:
-            if not ipv4_range and mode != 'auto':
+        if params['name'] and not network:
+            if not params['ipv4_range'] and params['mode'] != 'auto':
                 module.fail_json(
-                    msg     = "Network %s is not found. To create network in legacy or custom mode, 'ipv4_range' parameter is required" % name,
+                    msg     = "Network %s is not found. To create network in legacy or custom mode, 'ipv4_range' parameter is required" % params['name'],
                     changed = False
                 )
 
-            args = [ipv4_range if mode =='legacy' else None]
+            args = [params['ipv4_range'] if params['mode'] =='legacy' else None]
             kwargs = {}
-            if mode != 'legacy':
-                kwargs['mode'] = mode
+            if params['mode'] != 'legacy':
+                kwargs['mode'] = params['mode']
 
-            network = gce.ex_create_network(name, *args, **kwargs)
-            json_output['name'] = name
-            json_output['ipv4_range'] = ipv4_range
+            network = gce.ex_create_network(params['name'], *args, **kwargs)
+            json_output['name'] = params['name']
+            json_output['ipv4_range'] = params['ipv4_range']
             changed = True
 
-        if (subnet_name or ipv4_range) and not subnet and mode == 'custom':
-            if not subnet_name or not ipv4_range or not subnet_region:
+        if (params['subnet_name'] or params['ipv4_range']) and not subnet and params['mode'] == 'custom':
+            if not params['subnet_name'] or not params['ipv4_range'] or not params['subnet_region']:
                 module.fail_json(
                     msg     = "subnet_name, ipv4_range and subnet_region required for custom mode",
                     changed = changed
                 )
 
-            subnet = gce.ex_create_subnetwork(subnet_name, cidr=ipv4_range, network=name, region=subnet_region, description=subnet_desc)
-            json_output['subnet_name'] = subnet_name
-            json_output['ipv4_range'] = ipv4_range
+            subnet = gce.ex_create_subnetwork(params['subnet_name'], cidr=params['ipv4_range'], network=params['name'], region=params['subnet_region'], description=params['subnet_desc'])
+            json_output['subnet_name'] = params['subnet_name']
+            json_output['ipv4_range'] = params['ipv4_range']
             changed = True
 
-        if fwname:
+        if params['fwname']:
             # user creating a firewall rule
-            if not allowed and not src_range and not src_tags:
+            if not params['allowed'] and not params['src_range'] and not params['src_tags']:
                 if changed and network:
                     module.fail_json(
                         msg     = "Network created, but missing required firewall rule parameter(s)",
@@ -427,16 +426,16 @@ def main():
                     changed = False
                 )
 
-            allowed_list = format_allowed(allowed)
+            allowed_list = format_allowed(params['allowed'])
 
             # Fetch existing rule and if it exists, compare attributes
             # update if attributes changed.  Create if doesn't exist.
             try:
-                fw = gce.ex_get_firewall(fwname)
+                fw = gce.ex_get_firewall(params['fwname'])
             # Firewall rule not found so we try to create it.
             except ResourceNotFoundError:
-                gce.ex_create_firewall(fwname, allowed_list, network=name,
-                    source_ranges=src_range, source_tags=src_tags, target_tags=target_tags)
+                gce.ex_create_firewall(params['fwname'], allowed_list, network=params['name'],
+                    source_ranges=params['src_range'], source_tags=params['src_tags'], target_tags=params['target_tags'])
                 changed = True
             else:
                 fw_changed = False
@@ -453,77 +452,77 @@ def main():
 
                 # If these attributes are lists, we sort them first, then compare.
                 # Otherwise, we update if they differ.
-                if fw.source_ranges != src_range:
-                    if isinstance(src_range, list):
-                        if sorted(fw.source_ranges) != sorted(src_range):
-                            fw.source_ranges = src_range
+                if fw.source_ranges != params['src_range']:
+                    if isinstance(params['src_range'], list):
+                        if sorted(fw.source_ranges) != sorted(params['src_range']):
+                            fw.source_ranges = params['src_range']
                             fw_changed = True
                     else:
-                        fw.source_ranges = src_range
+                        fw.source_ranges = params['src_range']
                         fw_changed = True
 
                 # source_tags might not be set in the project; cast it to an empty list
                 fw.source_tags = fw.source_tags or []
 
-                if fw.source_tags != src_tags:
-                    if isinstance(src_tags, list):
-                        if sorted(fw.source_tags) != sorted(src_tags):
-                            fw.source_tags = src_tags
+                if fw.source_tags != params['src_tags']:
+                    if isinstance(params['src_tags'], list):
+                        if sorted(fw.source_tags) != sorted(params['src_tags']):
+                            fw.source_tags = params['src_tags']
                             fw_changed = True
                     else:
-                        fw.source_tags = src_tags
+                        fw.source_tags = params['src_tags']
                         fw_changed = True
 
                 # target_tags might not be set in the project; cast it to an empty list
                 fw.target_tags = fw.target_tags or []
 
-                if fw.target_tags != target_tags:
-                    if isinstance(target_tags, list):
-                        if sorted(fw.target_tags) != sorted(target_tags):
-                            fw.target_tags = target_tags
+                if fw.target_tags != params['target_tags']:
+                    if isinstance(params['target_tags'], list):
+                        if sorted(fw.target_tags) != sorted(params['target_tags']):
+                            fw.target_tags = params['target_tags']
                             fw_changed = True
                     else:
-                        fw.target_tags = target_tags
+                        fw.target_tags = params['target_tags']
                         fw_changed = True
 
                 if fw_changed is True:
                     gce.ex_update_firewall(fw)
                     changed = True
 
-            json_output['fwname']      = fwname
-            json_output['allowed']     = allowed
-            json_output['src_range']   = src_range
-            json_output['src_tags']    = src_tags
-            json_output['target_tags'] = target_tags
+            json_output['fwname']      = params['fwname']
+            json_output['allowed']     = params['allowed']
+            json_output['src_range']   = params['src_range']
+            json_output['src_tags']    = params['src_tags']
+            json_output['target_tags'] = params['target_tags']
 
-    if state in ['absent', 'deleted']:
-        if fwname:
-            json_output['fwname'] = fwname
+    if params['state'] in ['absent', 'deleted']:
+        if params['fwname']:
+            json_output['fwname'] = params['fwname']
             fw = None
             try:
-                fw = gce.ex_get_firewall(fwname)
+                fw = gce.ex_get_firewall(params['fwname'])
             except ResourceNotFoundError:
                 pass
             if fw:
                 gce.ex_destroy_firewall(fw)
                 changed = True
-        elif subnet_name:
+        elif params['subnet_name']:
             if not hasattr(gce, 'ex_get_subnetwork') or not hasattr(gce, 'ex_destroy_subnetwork'):
                 module.fail_json(msg='Update libcloud to a more recent version (>1.0) that supports subnetwork creation', changed=changed)
-            json_output['name'] = subnet_name
+            json_output['name'] = params['subnet_name']
             subnet = None
             try:
-                subnet = gce.ex_get_subnetwork(subnet_name, region=subnet_region)
+                subnet = gce.ex_get_subnetwork(params['subnet_name'], region=params['subnet_region'])
             except ResourceNotFoundError:
                 pass
             if subnet:
                 gce.ex_destroy_subnetwork(subnet)
                 changed = True
-        elif name:
-            json_output['name'] = name
+        elif params['name']:
+            json_output['name'] = params['name']
             network = None
             try:
-                network = gce.ex_get_network(name)
+                network = gce.ex_get_network(params['name'])
             except ResourceNotFoundError:
                 pass
             if network:
