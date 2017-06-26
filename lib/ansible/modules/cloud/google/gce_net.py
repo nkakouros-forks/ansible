@@ -328,18 +328,18 @@ def main():
 
     module = AnsibleModule(
         argument_spec = dict(
-            allowed               = dict(),
-            ipv4_range            = dict(),
-            fwname                = dict(),
-            name                  = dict(),
-            src_range             = dict(default=[], type='list'),
-            src_tags              = dict(default=[], type='list'),
-            target_tags           = dict(default=[], type='list'),
-            state                 = dict(default='present'),
+            name                  = dict(required=True),
             mode                  = dict(default='legacy', choices=['legacy', 'auto', 'custom']),
             subnet_name           = dict(),
             subnet_region         = dict(),
             subnet_desc           = dict(),
+            ipv4_range            = dict(),
+            fwname                = dict(),
+            allowed               = dict(),
+            src_range             = dict(default=[], type='list'),
+            src_tags              = dict(default=[], type='list'),
+            target_tags           = dict(default=[], type='list'),
+            state                 = dict(default='present'),
         ),
         required_if = [
             ('mode', 'custom', ['subnet_name', 'ipv4_range', 'subnet_region']),
@@ -351,18 +351,18 @@ def main():
     gce = gce_connect(module)
 
     params = {
-        'allowed'       : module.params['allowed'],
-        'ipv4_range'    : module.params['ipv4_range'],
-        'fwname'        : module.params['fwname'],
         'name'          : module.params['name'],
-        'src_range'     : module.params['src_range'],
-        'src_tags'      : module.params['src_tags'],
-        'target_tags'   : module.params['target_tags'],
-        'state'         : module.params['state'],
         'mode'          : module.params['mode'],
         'subnet_name'   : module.params['subnet_name'],
         'subnet_region' : module.params['subnet_region'],
         'subnet_desc'   : module.params['subnet_desc'],
+        'ipv4_range'    : module.params['ipv4_range'],
+        'fwname'        : module.params['fwname'],
+        'allowed'       : module.params['allowed'],
+        'src_range'     : module.params['src_range'],
+        'src_tags'      : module.params['src_tags'],
+        'target_tags'   : module.params['target_tags'],
+        'state'         : module.params['state'],
     }
 
     json_output = {'state': params['state']}
