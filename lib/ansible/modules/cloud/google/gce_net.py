@@ -244,8 +244,8 @@ try:
     from distutils.version import LooseVersion
 
     # import module snippets
-    from ansible.module_utils.basic import *
-    from ansible.module_utils.gce import *
+    from ansible.module_utils.basic import AnsibleModule
+    from ansible.module_utils.gce import gce_connect
 except:
     module.fail_json(
         msg     = "An unexpected error has occured while importing asible libraries.",
