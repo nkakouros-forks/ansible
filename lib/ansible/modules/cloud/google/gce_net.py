@@ -182,7 +182,7 @@ except:
 # Constants
 ################################################################################
 
-# ex_create_route was introduced in libcloud 0.17.0
+# subnet methods were introduced in 1.0.0
 MINIMUM_LIBCLOUD_VERSION = '1.0.0'
 
 PROVIDER = Provider.GCE
