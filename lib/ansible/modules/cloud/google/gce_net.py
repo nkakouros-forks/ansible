@@ -51,8 +51,10 @@ options:
     ipv4_range:
         description:
             - The IPv4 address range in CIDR notation for the network.
-            - This parameter is not mandatory when you specified an existing network in the name parameter.
-            - This parameter is mandatory, when you creating a new network.
+            - This parameter is not mandatory when:
+                - you specified an existing network in the name parameter.
+                - you are creating an 'auto' mode network
+            - This parameter is mandatory when you creating a new, 'custom' mode network.
         aliases: ['cidr']
     fwname:
         description:
