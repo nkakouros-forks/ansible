@@ -55,14 +55,15 @@ options
     src_range:
         description:
             - The source IPv4 address range that the rule will filter.
-            - It must be in CIDR notation, eg 10.0.0.0/17
+            - It must be an array of subnet addresses in CIDR notation, eg 10.0.0.0/17
             - Mutually exclusive with src_tags.
         required: true
         aliases: ['src_cidr']
     src_tags:
         description:
             - Traffic originating from these instances will be filtered through the rule.
-            - Mutually exclusive with src_tags.
+            - It must be an array of valid instance tags.
+            - Mutually exclusive with src_range.
         required: true
     target_tags:
         description:
