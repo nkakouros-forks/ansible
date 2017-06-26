@@ -244,8 +244,6 @@ def main():
 
     gce = gce_connect(module, PROVIDER)
 
-    json_output = {'state': params['state']}
-
     if params['state'] == 'present':
         network = None
         subnet = None
@@ -257,16 +255,8 @@ def main():
             # user wants to create a new network that doesn't yet exist
             args = [params['ipv4_range'] if params['mode'] =='legacy' else None]
             kwargs = {'mode': params['mode']}
-
             network = gce.ex_create_network(params['name'], *args, **kwargs)
-            json_output['name'] = params['name']
-            json_output['ipv4_range'] = params['ipv4_range']
             changed = True
-
-        json_output['name'] = params['name']
-
-        if params['mode'] == 'legacy':
-            json_output['ipv4_range'] = network.cidr
 
         if params['mode'] == 'custom':
             try:
@@ -275,16 +265,10 @@ def main():
                 # user also wants to create a new subnet
                 subnet = gce.ex_create_subnetwork(params['subnet_name'], cidr=params['ipv4_range'],
                     network=params['name'], region=params['subnet_region'], description=params['subnet_desc'])
-                json_output['subnet_name'] = params['subnet_name']
-                json_output['ipv4_range'] = params['ipv4_range']
                 changed = True
-            else:
-                json_output['subnet_name'] = params['subnet_name']
-                json_output['ipv4_range'] = subnet.cidr
 
     if params['state'] == 'absent':
         if params['subnet_name']:
-            json_output['subnet_name'] = params['subnet_name']
             subnet = None
             try:
                 subnet = gce.ex_get_subnetwork(params['subnet_name'], region=params['subnet_region'])
@@ -294,7 +278,6 @@ def main():
                 gce.ex_destroy_subnetwork(subnet)
                 changed = True
         elif params['name']:
-            json_output['name'] = params['name']
             network = None
             try:
                 network = gce.ex_get_network(params['name'])
@@ -304,7 +287,9 @@ def main():
                 gce.ex_destroy_network(network)
                 changed = True
 
-    json_output['changed'] = changed
+    json_output = {'changed': changed}
+    json_output.update(params)
+
     module.exit_json(**json_output)
 
 if __name__ == '__main__':
