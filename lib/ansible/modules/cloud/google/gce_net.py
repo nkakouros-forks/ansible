@@ -329,7 +329,7 @@ def main():
     module = AnsibleModule(
         argument_spec = dict(
             name                  = dict(required=True),
-            mode                  = dict(default='legacy', choices=['legacy', 'auto', 'custom']),
+            mode                  = dict(default='auto', choices=['legacy', 'auto', 'custom']),
             subnet_name           = dict(),
             subnet_region         = dict(),
             subnet_desc           = dict(),
