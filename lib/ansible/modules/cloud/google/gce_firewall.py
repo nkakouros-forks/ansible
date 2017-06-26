@@ -33,7 +33,7 @@ description:
       be found at U(https://docs.ansible.com/ansible/guide_gce.html).
 requirements:
     - "python >= 2.6"
-    - "apache-libcloud >= 1.0.0"
+    - "apache-libcloud >= 0.14.0"
 author:
     - "Eric Johnson (@erjohnso) <erjohnso@google.com>""
     - "Tom Melendez (@supertom) <supertom@google.com>"
