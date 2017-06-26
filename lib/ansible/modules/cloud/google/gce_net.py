@@ -503,8 +503,6 @@ def main():
                 gce.ex_destroy_firewall(fw)
                 changed = True
         elif params['subnet_name']:
-            if not hasattr(gce, 'ex_get_subnetwork') or not hasattr(gce, 'ex_destroy_subnetwork'):
-                module.fail_json(msg='Update libcloud to a more recent version (>1.0) that supports subnetwork creation', changed=changed)
             json_output['name'] = params['subnet_name']
             subnet = None
             try:
