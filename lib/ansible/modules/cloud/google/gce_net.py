@@ -372,10 +372,14 @@ def main():
             json_output['name'] = name
             if mode == 'legacy':
                 json_output['ipv4_range'] = network.cidr
-            if network and mode == 'custom' and subnet_name:
-                subnet = gce.ex_get_subnetwork(subnet_name, region=subnet_region)
-                json_output['subnet_name'] = subnet_name
-                json_output['ipv4_range'] = subnet.cidr
+            if mode == 'custom' and subnet_name:
+                try:
+                    subnet = gce.ex_get_subnetwork(subnet_name, region=subnet_region)
+                except ResourceNotFoundError:
+                    pass
+                else:
+                    json_output['subnet_name'] = subnet_name
+                    json_output['ipv4_range'] = subnet.cidr
 
         # user wants to create a new network that doesn't yet exist
         if name and not network:
