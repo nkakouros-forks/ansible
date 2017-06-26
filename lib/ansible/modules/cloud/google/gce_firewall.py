@@ -254,7 +254,8 @@ def main():
         ],
         mutually_exclusive = [
             ['src_range', 'src_tags'],
-        ]
+        ],
+        supports_check_mode = True,
     )
 
     # check if src_range is set when src_tags is not (not covered by the above)
@@ -294,8 +295,9 @@ def main():
             fw = gce.ex_get_firewall(params['name'])
         except ResourceNotFoundError:
             # Firewall rule not found so we try to create it.
-            gce.ex_create_firewall(params['name'], allowed_list, network=params['network'],
-                source_ranges=params['src_range'], source_tags=params['src_tags'], target_tags=params['target_tags'])
+            if not module.check_mode:
+                gce.ex_create_firewall(params['name'], allowed_list, network=params['network'],
+                    source_ranges=params['src_range'], source_tags=params['src_tags'], target_tags=params['target_tags'])
             changed = True
         else:
             # If old and new attributes are different, we update the firewall rule.
@@ -353,7 +355,8 @@ def main():
                     changed = True
 
             if changed is True:
-                gce.ex_update_firewall(fw)
+                if not module.check_mode:
+                    gce.ex_update_firewall(fw)
                 changed = True
 
     if params['state'] == 'absent':
@@ -364,7 +367,8 @@ def main():
             except ResourceNotFoundError:
                 pass
             if fw:
-                gce.ex_destroy_firewall(fw)
+                if not module.check_mode:
+                    gce.ex_destroy_firewall(fw)
                 changed = True
 
     json_output = {'changed': changed}
