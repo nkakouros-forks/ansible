@@ -229,7 +229,6 @@ target_tags:
 
 try:
     from libcloud import __version__ as LIBCLOUD_VERSION
-    # from libcloud.compute.providers import get_driver
     from libcloud.compute.providers import Provider
     from libcloud.common.google import GoogleBaseError, QuotaExceededError, \
             ResourceExistsError, ResourceNotFoundError
@@ -349,8 +348,6 @@ def main():
         mutually_exclusive = ['src_range', 'src_tags']
     )
 
-    gce = gce_connect(module)
-
     params = {
         'name'          : module.params['name'],
         'mode'          : module.params['mode'],
@@ -365,6 +362,8 @@ def main():
         'target_tags'   : module.params['target_tags'],
         'state'         : module.params['state'],
     }
+
+    gce = gce_connect(module, PROVIDER)
 
     json_output = {'state': params['state']}
 
