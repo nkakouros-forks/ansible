@@ -43,34 +43,10 @@ author:
 - "Tom Melendez (@supertom) <supertom@google.com>"
 - "Nikolaos Kakouros (@tterranigma) <tterranigma@gmail.com>"
 options:
-    allowed:
-        description:
-            - The protocol:ports to allow ('tcp:80' or 'tcp:80,443' or 'tcp:80-800;udp:1-25').
-            - This parameter is mandatory when creating or updating a firewall rule.
-        default: null
-    fwname:
-        description:
-            - The name of the firewall rule.
-        aliases: ['fwrule']
     name:
         description:
             - The name of the network.
-    src_range:
-        description:
-            - The source IPv4 address range in CIDR notation.
-        aliases: ['src_cidr']
-    src_tags:
-        description:
-            - The source instance tags for creating a firewall rule.
-    target_tags:
-        version_added: "1.9"
-        description:
-            - The target instance tags for creating a firewall rule.
-    state:
-        description:
-            - Desired state of the network or firewall.
-        default: "present"
-        choices: ["active", "present", "absent", "deleted"]
+        required: true
     mode:
         version_added: "2.2"
         description:
@@ -79,8 +55,8 @@ options:
             - "auto" automatically generates subnetworks in different regions.
             - "custom" uses networks to group subnets of user specified IP address ranges.
             - See U(https://cloud.google.com/compute/docs/networking#network_types) for more information.
-        default: "legacy"
         choices: ["legacy", "auto", "custom"]
+        default: "legacy"
     subnet_name:
         version_added: "2.2"
         description:
@@ -104,6 +80,31 @@ options:
             - Required when I(mode=legacy) or I(mode=custom)
             - Only used when I(mode=legacy) or I(mode=custom)
         aliases: ['cidr']
+    fwname:
+        description:
+            - The name of the firewall rule.
+        aliases: ['fwrule']
+    allowed:
+        description:
+            - The protocol:ports to allow ('tcp:80' or 'tcp:80,443' or 'tcp:80-800;udp:1-25').
+            - This parameter is mandatory when creating or updating a firewall rule.
+        default: null
+    src_range:
+        description:
+            - The source IPv4 address range in CIDR notation.
+        aliases: ['src_cidr']
+    src_tags:
+        description:
+            - The source instance tags for creating a firewall rule.
+    target_tags:
+        version_added: "1.9"
+        description:
+            - The target instance tags for creating a firewall rule.
+    state:
+        description:
+            - Desired state of the network or firewall.
+        default: "present"
+        choices: ["active", "present", "absent", "deleted"]
 '''
 
 EXAMPLES = '''
