@@ -346,6 +346,7 @@ def main():
             ('mode', 'legacy', ['ipv4_range']),
         ],
         required_together = ['subnet_name', 'subnet_region'],
+        mutually_exclusive = ['src_range', 'src_tags']
     )
 
     gce = gce_connect(module)
