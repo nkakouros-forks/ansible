@@ -104,7 +104,7 @@ options:
         description:
             - Desired state of the network or firewall.
         default: "present"
-        choices: ["active", "present", "absent", "deleted"]
+        choices: ["present", "absent"]
 '''
 
 EXAMPLES = '''
@@ -339,7 +339,7 @@ def main():
             src_range             = dict(default=[], type='list'),
             src_tags              = dict(default=[], type='list'),
             target_tags           = dict(default=[], type='list'),
-            state                 = dict(default='present'),
+            state                 = dict(default='present', choices=['present', 'absent']),
         ),
         required_if = [
             ('mode', 'custom', ['subnet_name', 'ipv4_range', 'subnet_region']),
@@ -368,7 +368,7 @@ def main():
 
     json_output = {'state': params['state']}
 
-    if params['state'] in ['active', 'present']:
+    if params['state'] == 'present':
         network = None
         subnet = None
 
@@ -491,7 +491,7 @@ def main():
             json_output['src_tags']    = params['src_tags']
             json_output['target_tags'] = params['target_tags']
 
-    if params['state'] in ['absent', 'deleted']:
+    if params['state'] == 'absent':
         if params['fwname']:
             json_output['fwname'] = params['fwname']
             fw = None
