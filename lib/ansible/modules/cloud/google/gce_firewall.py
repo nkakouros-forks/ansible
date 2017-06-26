@@ -156,7 +156,7 @@ except ImportError:
 try:
     # module specific imports
     from distutils.version import LooseVersion
-    from pprint import pprint
+
     # import module snippets
     from ansible.module_utils.basic import AnsibleModule
     from ansible.module_utils.gce import gce_connect
