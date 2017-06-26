@@ -503,7 +503,7 @@ def main():
                 gce.ex_destroy_firewall(fw)
                 changed = True
         elif params['subnet_name']:
-            json_output['name'] = params['subnet_name']
+            json_output['subnet_name'] = params['subnet_name']
             subnet = None
             try:
                 subnet = gce.ex_get_subnetwork(params['subnet_name'], region=params['subnet_region'])
