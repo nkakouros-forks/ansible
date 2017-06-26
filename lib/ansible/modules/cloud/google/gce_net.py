@@ -33,127 +33,72 @@ description:
       I(fwname) parameter is used to reference firewall rules.
       IPv4 Address ranges must be specified using the CIDR
       U(http://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing) format.
-      Full install/configuration instructions for the gce* modules can
-      be found in the comments of ansible/test/gce_tests.py.
-options:
-  allowed:
-    description:
-      - the protocol:ports to allow ('tcp:80' or 'tcp:80,443' or 'tcp:80-800;udp:1-25')
-        this parameter is mandatory when creating or updating a firewall rule
-    required: false
-    default: null
-    aliases: []
-  ipv4_range:
-    description:
-      - the IPv4 address range in CIDR notation for the network
-        this parameter is not mandatory when you specified existing network in name parameter, but when you create new network, this parameter is mandatory
-    required: false
-    aliases: ['cidr']
-  fwname:
-    description:
-      - name of the firewall rule
-    required: false
-    default: null
-    aliases: ['fwrule']
-  name:
-    description:
-      - name of the network
-    required: false
-    default: null
-    aliases: []
-  src_range:
-    description:
-      - the source IPv4 address range in CIDR notation
-    required: false
-    default: []
-    aliases: ['src_cidr']
-  src_tags:
-    description:
-      - the source instance tags for creating a firewall rule
-    required: false
-    default: []
-    aliases: []
-  target_tags:
-    version_added: "1.9"
-    description:
-      - the target instance tags for creating a firewall rule
-    required: false
-    default: []
-    aliases: []
-  state:
-    description:
-      - desired state of the network or firewall
-    required: false
-    default: "present"
-    choices: ["active", "present", "absent", "deleted"]
-    aliases: []
-  service_account_email:
-    version_added: "1.6"
-    description:
-      - service account email
-    required: false
-    default: null
-    aliases: []
-  pem_file:
-    version_added: "1.6"
-    description:
-      - path to the pem file associated with the service account email
-        This option is deprecated. Use 'credentials_file'.
-    required: false
-    default: null
-    aliases: []
-  credentials_file:
-    version_added: "2.1.0"
-    description:
-      - path to the JSON file associated with the service account email
-    required: false
-    default: null
-    aliases: []
-  project_id:
-    version_added: "1.6"
-    description:
-      - your GCE project ID
-    required: false
-    default: null
-    aliases: []
-  mode:
-    version_added: "2.2"
-    description:
-      - network mode for Google Cloud
-        "legacy" indicates a network with an IP address range
-        "auto" automatically generates subnetworks in different regions
-        "custom" uses networks to group subnets of user specified IP address ranges
-        https://cloud.google.com/compute/docs/networking#network_types
-    required: false
-    default: "legacy"
-    choices: ["legacy", "auto", "custom"]
-    aliases: []
-  subnet_name:
-    version_added: "2.2"
-    description:
-      - name of subnet to create
-    required: false
-    default: null
-    aliases: []
-  subnet_region:
-    version_added: "2.2"
-    description:
-      - region of subnet to create
-    required: false
-    default: null
-    aliases: []
-  subnet_desc:
-    version_added: "2.2"
-    description:
-      - description of subnet to create
-    required: false
-    default: null
-    aliases: []
-
+      Installation/configuration instructions for the gce* modules can
+      be found at U(https://docs.ansible.com/ansible/guide_gce.html).
 requirements:
     - "python >= 2.6"
-    - "apache-libcloud >= 0.13.3, >= 0.17.0 if using JSON credentials"
-author: "Eric Johnson (@erjohnso) <erjohnso@google.com>, Tom Melendez (@supertom) <supertom@google.com>"
+    - "apache-libcloud >= 1.0.0"
+author:
+- "Eric Johnson (@erjohnso) <erjohnso@google.com>""
+- "Tom Melendez (@supertom) <supertom@google.com>"
+- "Nikolaos Kakouros (@tterranigma) <tterranigma@gmail.com>"
+options:
+    allowed:
+        description:
+            - The protocol:ports to allow ('tcp:80' or 'tcp:80,443' or 'tcp:80-800;udp:1-25').
+            - This parameter is mandatory when creating or updating a firewall rule.
+        default: null
+    ipv4_range:
+        description:
+            - The IPv4 address range in CIDR notation for the network.
+            - This parameter is not mandatory when you specified an existing network in the name parameter.
+            - This parameter is mandatory, when you creating a new network.
+        aliases: ['cidr']
+    fwname:
+        description:
+            - The name of the firewall rule.
+        aliases: ['fwrule']
+    name:
+        description:
+            - The name of the network.
+    src_range:
+        description:
+            - The source IPv4 address range in CIDR notation.
+        aliases: ['src_cidr']
+    src_tags:
+        description:
+            - The source instance tags for creating a firewall rule.
+    target_tags:
+        version_added: "1.9"
+        description:
+            - The target instance tags for creating a firewall rule.
+    state:
+        description:
+            - Desired state of the network or firewall.
+        default: "present"
+        choices: ["active", "present", "absent", "deleted"]
+    mode:
+        version_added: "2.2"
+        description:
+            - Network mode for Google Cloud.
+            - "legacy" indicates a network with an IP address range.
+            - "auto" automatically generates subnetworks in different regions.
+            - "custom" uses networks to group subnets of user specified IP address ranges.
+            - See U(https://cloud.google.com/compute/docs/networking#network_types) for more information.
+        default: "legacy"
+        choices: ["legacy", "auto", "custom"]
+    subnet_name:
+        version_added: "2.2"
+        description:
+            - The name of the subnet to create.
+    subnet_region:
+        version_added: "2.2"
+        description:
+            - The region in which to create the subnet.
+    subnet_desc:
+        version_added: "2.2"
+        description:
+            - A description for the subnet.
 '''
 
 EXAMPLES = '''
@@ -271,15 +216,50 @@ target_tags:
     type: list
     sample: [ 'foo', 'bar' ]
 '''
+
+################################################################################
+# Imports
+################################################################################
+
 try:
-    from libcloud.compute.types import Provider
-    from libcloud.compute.providers import get_driver
+    from libcloud import __version__ as LIBCLOUD_VERSION
+    # from libcloud.compute.providers import get_driver
+    from libcloud.compute.providers import Provider
     from libcloud.common.google import GoogleBaseError, QuotaExceededError, \
             ResourceExistsError, ResourceNotFoundError
+
     _ = Provider.GCE
     HAS_LIBCLOUD = True
 except ImportError:
     HAS_LIBCLOUD = False
+
+try:
+    # module specific imports
+    from distutils.version import LooseVersion
+
+    # import module snippets
+    from ansible.module_utils.basic import *
+    from ansible.module_utils.gce import *
+except:
+    module.fail_json(
+        msg     = "An unexpected error has occured while importing asible libraries.",
+        changed = False
+    )
+
+
+################################################################################
+# Constants
+################################################################################
+
+# ex_create_route was introduced in libcloud 0.17.0
+MINIMUM_LIBCLOUD_VERSION = '1.0.0'
+
+PROVIDER = Provider.GCE
+
+
+################################################################################
+# Functions
+################################################################################
 
 def format_allowed_section(allowed):
     """Format each section of the allowed list"""
@@ -317,48 +297,68 @@ def sorted_allowed_list(allowed_list):
     # sort the ports list
     return sorted(allowed_by_protocol, key=lambda y: y.get('ports', []).sort())
 
+def check_libcloud():
+    # Apache libcloud needs to be installed and at least the minimum version.
+    if not HAS_LIBCLOUD:
+        module.fail_json(
+            msg     = 'This module requires Apache libcloud %s or greater' % MINIMUM_LIBCLOUD_VERSION,
+            changed = False
+        )
+    elif LooseVersion(LIBCLOUD_VERSION) < MINIMUM_LIBCLOUD_VERSION:
+        module.fail_json(
+            msg     = 'This module requires Apache libcloud %s or greater' % MINIMUM_LIBCLOUD_VERSION,
+            changed = False
+        )
+
+
+
+################################################################################
+# Main
+################################################################################
 
 def main():
+    changed = False
+
+    check_libcloud()
+
     module = AnsibleModule(
         argument_spec = dict(
-            allowed = dict(),
-            ipv4_range = dict(),
-            fwname = dict(),
-            name = dict(),
-            src_range = dict(default=[], type='list'),
-            src_tags = dict(default=[], type='list'),
-            target_tags = dict(default=[], type='list'),
-            state = dict(default='present'),
+            allowed               = dict(),
+            ipv4_range            = dict(),
+            fwname                = dict(),
+            name                  = dict(),
+            src_range             = dict(default=[], type='list'),
+            src_tags              = dict(default=[], type='list'),
+            target_tags           = dict(default=[], type='list'),
+            state                 = dict(default='present'),
             service_account_email = dict(),
-            pem_file = dict(type='path'),
-            credentials_file = dict(type='path'),
-            project_id = dict(),
-            mode = dict(default='legacy', choices=['legacy', 'auto', 'custom']),
-            subnet_name = dict(),
-            subnet_region = dict(),
-            subnet_desc = dict(),
+            pem_file              = dict(type='path'),
+            credentials_file      = dict(type='path'),
+            project_id            = dict(),
+            mode                  = dict(default='legacy', choices=['legacy', 'auto', 'custom']),
+            subnet_name           = dict(),
+            subnet_region         = dict(),
+            subnet_desc           = dict(),
         )
     )
 
-    if not HAS_LIBCLOUD:
-        module.fail_json(msg='libcloud with GCE support (0.17.0+) required for this module')
-
     gce = gce_connect(module)
 
-    allowed = module.params.get('allowed')
-    ipv4_range = module.params.get('ipv4_range')
-    fwname = module.params.get('fwname')
-    name = module.params.get('name')
-    src_range = module.params.get('src_range')
-    src_tags = module.params.get('src_tags')
-    target_tags = module.params.get('target_tags')
-    state = module.params.get('state')
-    mode = module.params.get('mode')
-    subnet_name = module.params.get('subnet_name')
-    subnet_region = module.params.get('subnet_region')
-    subnet_desc = module.params.get('subnet_desc')
+    params = {
+        'allowed'       : module.params['allowed'],
+        'ipv4_range'    : module.params['ipv4_range'],
+        'fwname'        : module.params['fwname'],
+        'name'          : module.params['name'],
+        'src_range'     : module.params['src_range'],
+        'src_tags'      : module.params['src_tags'],
+        'target_tags'   : module.params['target_tags'],
+        'state'         : module.params['state'],
+        'mode'          : module.params['mode'],
+        'subnet_name'   : module.params['subnet_name'],
+        'subnet_region' : module.params['subnet_region'],
+        'subnet_desc'   : module.params['subnet_desc'],
+    }
 
-    changed = False
     json_output = {'state': state}
 
     if state in ['active', 'present']:
@@ -366,73 +366,74 @@ def main():
         subnet = None
         try:
             network = gce.ex_get_network(name)
+        except ResourceNotFoundError:
+            pass
+        else:
             json_output['name'] = name
             if mode == 'legacy':
                 json_output['ipv4_range'] = network.cidr
             if network and mode == 'custom' and subnet_name:
-                if not hasattr(gce, 'ex_get_subnetwork'):
-                    module.fail_json(msg="Update libcloud to a more recent version (>1.0) that supports network 'mode' parameter", changed=False)
-
                 subnet = gce.ex_get_subnetwork(subnet_name, region=subnet_region)
                 json_output['subnet_name'] = subnet_name
                 json_output['ipv4_range'] = subnet.cidr
-        except ResourceNotFoundError:
-            pass
-        except Exception as e:
-            module.fail_json(msg=unexpected_error_msg(e), changed=False)
 
         # user wants to create a new network that doesn't yet exist
         if name and not network:
             if not ipv4_range and mode != 'auto':
-                module.fail_json(msg="Network '" + name + "' is not found. To create network in legacy or custom mode, 'ipv4_range' parameter is required",
-                    changed=False)
+                module.fail_json(
+                    msg     = "Network %s is not found. To create network in legacy or custom mode, 'ipv4_range' parameter is required" % name,
+                    changed = False
+                )
+
             args = [ipv4_range if mode =='legacy' else None]
             kwargs = {}
             if mode != 'legacy':
                 kwargs['mode'] = mode
 
-            try:
-                network = gce.ex_create_network(name, *args, **kwargs)
-                json_output['name'] = name
-                json_output['ipv4_range'] = ipv4_range
-                changed = True
-            except TypeError:
-                module.fail_json(msg="Update libcloud to a more recent version (>1.0) that supports network 'mode' parameter", changed=False)
-            except Exception as e:
-                module.fail_json(msg=unexpected_error_msg(e), changed=False)
+            network = gce.ex_create_network(name, *args, **kwargs)
+            json_output['name'] = name
+            json_output['ipv4_range'] = ipv4_range
+            changed = True
 
         if (subnet_name or ipv4_range) and not subnet and mode == 'custom':
-            if not hasattr(gce, 'ex_create_subnetwork'):
-                module.fail_json(msg='Update libcloud to a more recent version (>1.0) that supports subnetwork creation', changed=changed)
             if not subnet_name or not ipv4_range or not subnet_region:
-                module.fail_json(msg="subnet_name, ipv4_range, and subnet_region required for custom mode", changed=changed)
+                module.fail_json(
+                    msg     = "subnet_name, ipv4_range and subnet_region required for custom mode",
+                    changed = changed
+                )
 
-            try:
-                subnet = gce.ex_create_subnetwork(subnet_name, cidr=ipv4_range, network=name, region=subnet_region, description=subnet_desc)
-                json_output['subnet_name'] = subnet_name
-                json_output['ipv4_range'] = ipv4_range
-                changed = True
-            except Exception as e:
-                module.fail_json(msg=unexpected_error_msg(e), changed=changed)
+            subnet = gce.ex_create_subnetwork(subnet_name, cidr=ipv4_range, network=name, region=subnet_region, description=subnet_desc)
+            json_output['subnet_name'] = subnet_name
+            json_output['ipv4_range'] = ipv4_range
+            changed = True
 
         if fwname:
             # user creating a firewall rule
             if not allowed and not src_range and not src_tags:
                 if changed and network:
                     module.fail_json(
-                        msg="Network created, but missing required " + \
-                        "firewall rule parameter(s)", changed=True)
+                        msg     = "Network created, but missing required firewall rule parameter(s)",
+                        changed = True
+                    )
+
                 module.fail_json(
-                    msg="Missing required firewall rule parameter(s)",
-                    changed=False)
+                    msg     = "Missing required firewall rule parameter(s)",
+                    changed = False
+                )
 
             allowed_list = format_allowed(allowed)
 
             # Fetch existing rule and if it exists, compare attributes
             # update if attributes changed.  Create if doesn't exist.
             try:
-                fw_changed = False
                 fw = gce.ex_get_firewall(fwname)
+            # Firewall rule not found so we try to create it.
+            except ResourceNotFoundError:
+                gce.ex_create_firewall(fwname, allowed_list, network=name,
+                    source_ranges=src_range, source_tags=src_tags, target_tags=target_tags)
+                changed = True
+            else:
+                fw_changed = False
 
                 # If old and new attributes are different, we update the firewall rule.
                 # This implicitly lets us clear out attributes as well.
@@ -480,29 +481,13 @@ def main():
                         fw_changed = True
 
                 if fw_changed is True:
-                    try:
-                        gce.ex_update_firewall(fw)
-                        changed = True
-                    except Exception as e:
-                        module.fail_json(msg=unexpected_error_msg(e), changed=False)
-
-            # Firewall rule not found so we try to create it.
-            except ResourceNotFoundError:
-                try:
-                    gce.ex_create_firewall(fwname, allowed_list, network=name,
-                        source_ranges=src_range, source_tags=src_tags, target_tags=target_tags)
+                    gce.ex_update_firewall(fw)
                     changed = True
 
-                except Exception as e:
-                    module.fail_json(msg=unexpected_error_msg(e), changed=False)
-
-            except Exception as e:
-                module.fail_json(msg=unexpected_error_msg(e), changed=False)
-
-            json_output['fwname'] = fwname
-            json_output['allowed'] = allowed
-            json_output['src_range'] = src_range
-            json_output['src_tags'] = src_tags
+            json_output['fwname']      = fwname
+            json_output['allowed']     = allowed
+            json_output['src_range']   = src_range
+            json_output['src_tags']    = src_tags
             json_output['target_tags'] = target_tags
 
     if state in ['absent', 'deleted']:
@@ -513,8 +498,6 @@ def main():
                 fw = gce.ex_get_firewall(fwname)
             except ResourceNotFoundError:
                 pass
-            except Exception as e:
-                module.fail_json(msg=unexpected_error_msg(e), changed=False)
             if fw:
                 gce.ex_destroy_firewall(fw)
                 changed = True
@@ -527,8 +510,6 @@ def main():
                 subnet = gce.ex_get_subnetwork(subnet_name, region=subnet_region)
             except ResourceNotFoundError:
                 pass
-            except Exception as e:
-                module.fail_json(msg=unexpected_error_msg(e), changed=False)
             if subnet:
                 gce.ex_destroy_subnetwork(subnet)
                 changed = True
@@ -537,24 +518,14 @@ def main():
             network = None
             try:
                 network = gce.ex_get_network(name)
-
             except ResourceNotFoundError:
                 pass
-            except Exception as e:
-                module.fail_json(msg=unexpected_error_msg(e), changed=False)
             if network:
-                try:
-                    gce.ex_destroy_network(network)
-                except Exception as e:
-                    module.fail_json(msg=unexpected_error_msg(e), changed=False)
+                gce.ex_destroy_network(network)
                 changed = True
 
     json_output['changed'] = changed
     module.exit_json(**json_output)
-
-# import module snippets
-from ansible.module_utils.basic import *
-from ansible.module_utils.gce import *
 
 if __name__ == '__main__':
     main()
