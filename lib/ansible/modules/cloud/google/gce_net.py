@@ -48,14 +48,6 @@ options:
             - The protocol:ports to allow ('tcp:80' or 'tcp:80,443' or 'tcp:80-800;udp:1-25').
             - This parameter is mandatory when creating or updating a firewall rule.
         default: null
-    ipv4_range:
-        description:
-            - The IPv4 address range in CIDR notation for the network.
-            - This parameter is not mandatory when:
-                - you specified an existing network in the name parameter.
-                - you are creating an 'auto' mode network
-            - This parameter is mandatory when you creating a new, 'custom' mode network.
-        aliases: ['cidr']
     fwname:
         description:
             - The name of the firewall rule.
@@ -93,14 +85,25 @@ options:
         version_added: "2.2"
         description:
             - The name of the subnet to create.
+            - Required when I(mode=custom)
+            - Only used when I(mode=custom)
     subnet_region:
         version_added: "2.2"
         description:
             - The region in which to create the subnet.
+            - Required when I(mode=custom)
+            - Only used when I(mode=custom)
     subnet_desc:
         version_added: "2.2"
         description:
             - A description for the subnet.
+            - Only used when I(mode=custom)
+    ipv4_range:
+        description:
+            - The IPv4 address range in CIDR notation for the network.
+            - Required when I(mode=legacy) or I(mode=custom)
+            - Only used when I(mode=legacy) or I(mode=custom)
+        aliases: ['cidr']
 '''
 
 EXAMPLES = '''
@@ -336,7 +339,12 @@ def main():
             subnet_name           = dict(),
             subnet_region         = dict(),
             subnet_desc           = dict(),
-        )
+        ),
+        required_if = [
+            ('mode', 'custom', ['subnet_name', 'ipv4_range', 'subnet_region']),
+            ('mode', 'legacy', ['ipv4_range']),
+        ],
+        required_together = ['subnet_name', 'subnet_region'],
     )
 
     gce = gce_connect(module)
@@ -361,6 +369,8 @@ def main():
     if params['state'] in ['active', 'present']:
         network = None
         subnet = None
+
+        # check if given network and subnet already exist
         try:
             network = gce.ex_get_network(params['name'])
         except ResourceNotFoundError:
@@ -369,7 +379,7 @@ def main():
             json_output['name'] = params['name']
             if params['mode'] == 'legacy':
                 json_output['ipv4_range'] = network.cidr
-            if params['mode'] == 'custom' and params['subnet_name']:
+            if params['mode'] == 'custom':
                 try:
                     subnet = gce.ex_get_subnetwork(params['subnet_name'], region=params['subnet_region'])
                 except ResourceNotFoundError:
@@ -380,30 +390,18 @@ def main():
 
         # user wants to create a new network that doesn't yet exist
         if params['name'] and not network:
-            if not params['ipv4_range'] and params['mode'] != 'auto':
-                module.fail_json(
-                    msg     = "Network %s is not found. To create network in legacy or custom mode, 'ipv4_range' parameter is required" % params['name'],
-                    changed = False
-                )
-
             args = [params['ipv4_range'] if params['mode'] =='legacy' else None]
-            kwargs = {}
-            if params['mode'] != 'legacy':
-                kwargs['mode'] = params['mode']
+            kwargs = {'mode': params['mode']}
 
             network = gce.ex_create_network(params['name'], *args, **kwargs)
             json_output['name'] = params['name']
             json_output['ipv4_range'] = params['ipv4_range']
             changed = True
 
-        if (params['subnet_name'] or params['ipv4_range']) and not subnet and params['mode'] == 'custom':
-            if not params['subnet_name'] or not params['ipv4_range'] or not params['subnet_region']:
-                module.fail_json(
-                    msg     = "subnet_name, ipv4_range and subnet_region required for custom mode",
-                    changed = changed
-                )
-
-            subnet = gce.ex_create_subnetwork(params['subnet_name'], cidr=params['ipv4_range'], network=params['name'], region=params['subnet_region'], description=params['subnet_desc'])
+        # user also wants to create a new subnet
+        if params['name'] and params['subnet_name'] and not subnet:
+            subnet = gce.ex_create_subnetwork(params['subnet_name'], cidr=params['ipv4_range'],
+                network=params['name'], region=params['subnet_region'], description=params['subnet_desc'])
             json_output['subnet_name'] = params['subnet_name']
             json_output['ipv4_range'] = params['ipv4_range']
             changed = True
