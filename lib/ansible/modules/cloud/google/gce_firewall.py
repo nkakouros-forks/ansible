@@ -300,17 +300,26 @@ def main():
         else:
             # If old and new attributes are different, we update the firewall rule.
             # This implicitly lets us clear out attributes as well.
+
+            # GCE does not support changing the network of a rule. If changed in
+            # the playbook, we will trigger an error to be explicit to the user.
+            # We could delete the rule and create a new one, thus "updating",
+            # but the use case is extremely limited
+            if fw.extra['network_name'] != params['network']:
+                module.fail_json(
+                    msg     = "Changing the network of a rule is not supported.",
+                    changed = False
+                )
+
             # allowed_list is required and must not be None for firewall rules.
             if allowed_list and (sorted_allowed_list(allowed_list) != sorted_allowed_list(fw.allowed)):
                 fw.allowed = allowed_list
                 changed = True
 
-            # source_ranges might be None; cast it to an empty list
-            fw.source_ranges = fw.source_ranges or []
-
-            # If these attributes are lists, we sort them first, then compare.
-            # Otherwise, we update if they differ.
+            # If not set, fw.source_tags will be None. Same for params['src_range']
             if fw.source_ranges != params['src_range']:
+                # If these attributes are lists, we sort them first, then compare.
+                # Otherwise, we update if they differ.
                 if isinstance(params['src_range'], list):
                     if sorted(fw.source_ranges) != sorted(params['src_range']):
                         fw.source_ranges = params['src_range']
@@ -358,8 +367,9 @@ def main():
                 gce.ex_destroy_firewall(fw)
                 changed = True
 
+    json_output = {'changed': changed}
     json_output.update(params)
-    json_output['changed'] = changed
+
     module.exit_json(**json_output)
 
 if __name__ == '__main__':
