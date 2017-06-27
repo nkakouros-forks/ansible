@@ -79,6 +79,8 @@ options:
     state:
         description:
             - Desired state of the network.
+            - It is not possible to delete (changing from I(present) to I(absent))
+              networks that contain subnets or subnets that contain instances.
         default: "present"
         choices: ["present", "absent"]
 '''
@@ -257,6 +259,21 @@ def main():
             kwargs = {'mode': params['mode']}
             network = gce.ex_create_network(params['name'], *args, **kwargs)
             changed = True
+        else:
+            # libcloud currently does not support switching a network from auto
+            # to custom mode.
+            if network.mode == 'auto' and params['mode'] == 'custom':
+                module.fail_json(
+                    msg     = "Currently switching an auto-mode network to custom mode is not supported in Ansible",
+                    changed = False
+                )
+
+            # Changing between modes any other way than auto->custom is not supported by GCE
+            if network.mode != params['mode']:
+                module.fail_json(
+                    msg     = "Google Cloud does not allow changing from %s mode to %s" % (network.mode, params['mode']),
+                    changed = False
+                )
 
         if params['mode'] == 'custom':
             try:
@@ -272,6 +289,23 @@ def main():
                 if subnet.network != params['name']:
                     module.fail_json(
                         msg     = "A subnet named '%s' already exists." % params['subnet_name'],
+                        changed = False
+                    )
+
+                # GCE does not allow changing subnet description or region.
+                # Changing the region makes no sense and changing the description
+                # is close to useless, so we will not support deleting/inserting,
+                # ie updating the subnet for these options.
+                if subnet.extra['description'] != params['description'] or subnet.extra['region'] != params['region']:
+                    module.fail_json(
+                        msg     = "Google Cloud does not support changing the region or the description of a route.",
+                        changed = False
+                    )
+
+                # libcloud currently does not support expanding the subnet.
+                if subnet.extra['description'] != params['']:
+                    module.fail_json(
+                        msg     = "Currently expanding the subnet through Ansible is not supported",
                         changed = False
                     )
 
