@@ -266,6 +266,14 @@ def main():
                 subnet = gce.ex_create_subnetwork(params['subnet_name'], cidr=params['ipv4_range'],
                     network=params['name'], region=params['subnet_region'], description=params['subnet_desc'])
                 changed = True
+            else:
+                # check if the subnet we found belongs to a different network,
+                # the name we try to give to the new subnet already exists
+                if subnet.network != params['name']:
+                    module.fail_json(
+                        msg     = "A subnet named '%s' already exists." % params['subnet_name'],
+                        changed = False
+                    )
 
     if params['state'] == 'absent':
         if params['subnet_name']:
