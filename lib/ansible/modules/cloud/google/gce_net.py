@@ -53,36 +53,46 @@ options:
             - See U(https://cloud.google.com/compute/docs/networking#network_types) for more information.
         choices: ["legacy", "auto", "custom"]
         default: "legacy"
-    subnet_name:
-        version_added: "2.2"
+    legacy_range:
         description:
-            - The name of the subnet to create.
-            - Required when I(mode=custom)
-            - Only used when I(mode=custom)
-    subnet_region:
-        version_added: "2.2"
+          - The IPv4 address range in CIDR notation for the legacy.
+          - Allowed and required when I(mode=legacy)
+    subnets:
+        version_added: "2.4"
         description:
-            - The region in which to create the subnet.
-            - Required when I(mode=custom)
-            - Only used when I(mode=custom)
-    subnet_desc:
-        version_added: "2.2"
+            - A list of the subnets to create on the network.
+            - The list is a list of dictionaries, each of which has 3 required options and one optional.
+            - Required options: name, region and range (in cidr notation)
+            - Optional option: description
+            - See the examples on how to use them.
+            - Google Cloud identifies subnets based on the (subnet-name, region) tuple.
+    subnet_policy:
+        version_added: "2.4"
         description:
-            - A description for the subnet.
-            - Only used when I(mode=custom)
-    ipv4_range:
-        description:
-            - The IPv4 address range in CIDR notation for the network.
-            - Required when I(mode=legacy) or I(mode=custom)
-            - Only used when I(mode=legacy) or I(mode=custom)
-        aliases: ['cidr']
+            - If I(ignore_strays) and I(state=present), the defined I(subnets) will be created as normal.
+            - If I(include_strays) and I(state=present), prior to creating the I(subnets), ansible
+              will also check if there are other, "stray" subnets on GCE that are not
+              specified in the I(subnets) option.
+            - If I(ignore_strays) and I(state=absent), ansible will check if there are "stray" subnets on the
+              network. If there are, the task will fail and no changes will be performed.
+            - If I(include_strays) and I(state=absent), all subnets on the network will be destroyed
+              including those that are not specified in I(subnets).
+            - To have full control of what exists on GCE, set I(subnet_policy=include_strays).
+        choices: ["ignore_strays", "include_strays"]
     state:
         description:
             - Desired state of the network.
-            - It is not possible to delete (changing from I(present) to I(absent))
-              networks that contain subnets or subnets that contain instances.
+            - When deleting the network (changing from I(present) to I(absent)), the subnets will also be deleted.
+            - See also the I(subnet_policy).
+            - It is not possible to delete subnets that contain instances.
         default: "present"
         choices: ["present", "absent"]
+notes:
+    - Google Cloud supports only IPv4 networks.
+    - The ip ranges used should be in cidr notation.
+    - Subnets in custom mode are not allowed to have overlapping cidr ranges.
+      Eg, a subnet with range: 10.0.0.0/20 and one with range: 10.0.0.0/16 will trigger an errror.
+    - Subnets that carry instances cannot be destroyed unless the instances are destroye first. Use M(gce) module for that.
 '''
 
 EXAMPLES = '''
@@ -90,8 +100,8 @@ EXAMPLES = '''
 - name: Create Legacy Network
   gce_net:
     name: legacynet
-    ipv4_range: '10.24.17.0/24'
     mode: legacy
+    legacy_range: '10.24.17.0/24'
     state: present
 
 # Create an 'auto' Network
@@ -105,47 +115,50 @@ EXAMPLES = '''
   gce_net:
     name: customnet
     mode: custom
-    subnet_name: "customsubnet"
-    subnet_region: us-east1
-    ipv4_range: '10.240.16.0/24'
-
-# Create Custom Subnetwork
-- name: Create Custom Subnetwork
-  gce_net:
-    name: privatenet
-    mode: custom
-    subnet_name: subnet_example
-    subnet_region: us-central1
-    ipv4_range: '10.0.0.0/16'
+    subnets:
+      - name: subnet1
+        range: 10.0.0.0/20
+        region: europe-west1
+        description: Sample description
+      - name: subnet2
+        range: 10.1.0.0/20
+        region: us-central1
+        description: Another description
 '''
 
 RETURN = '''
 name:
-    description: Name of the network.
+    description: name of the network
     returned: always
     type: string
     sample: "my-network"
 
-subnet_name:
-    description: Name of the subnetwork.
-    returned: when specified or when a subnetwork is created
+mode:
+    description: the mode of the network
+    returned: always
     type: string
-    sample: "my-subnetwork"
+    sample: "custom"
 
-subnet_region:
-    description: Region of the specified subnet.
-    returned: when specified or when a subnetwork is created
-    type: string
-    sample: "us-east1"
-
-ipv4_range:
-    description: IPv4 range of the specified network or subnetwork.
-    returned: when specified or when a subnetwork is created
+legacy_range:
+    description: IPv4 range of the legacy network
+    returned: when I(mode=legacy)
     type: string
     sample: "10.0.0.0/16"
 
+subnets:
+    description: the subnets that were specified (see the I(subnets) option for more details)
+    returned: when I(mode=custom)
+    type: dict
+    sample: "my-subnetwork"
+
+subnet_policy:
+    description: the policy when creating subnets (see the I(subnet_policy) option for more details)
+    returned: when I(mode=custom)
+    type: string
+    sample: ignore_strays
+
 state:
-    description: State of the item operated on.
+    description: state of the item operated on
     returned: always
     type: string
     sample: "present"
@@ -159,7 +172,8 @@ try:
     from libcloud import __version__ as LIBCLOUD_VERSION
     from libcloud.compute.providers import Provider
     from libcloud.common.google import GoogleBaseError, QuotaExceededError, \
-            ResourceExistsError, ResourceNotFoundError
+            ResourceExistsError, ResourceNotFoundError, InvalidRequestError, \
+            ResourceInUseError
 
     _ = Provider.GCE
     HAS_LIBCLOUD = True
@@ -207,6 +221,76 @@ def check_libcloud():
             changed = False
         )
 
+def check_subnet_spec(module):
+    # this will check if all the required subnet option are set on each subnet
+    for subnet in module.params['subnets']:
+        try:
+            subnet['name']
+            subnet['region']
+            subnet['range']
+        except KeyError as e:
+            module.fail_json(
+                msg     = "mode is custom but the following option for subnet '%s' is missing: %s" % (subnet['name'], str(e)),
+                changed = False
+            )
+
+def further_checks(module):
+    # AnsibleModule doesn't provide a way to apply constraints in sub-dicts in argument_spec
+    if module.params['mode'] == 'custom':
+        check_subnet_spec(module)
+        return
+    if module.params['mode'] == 'auto':
+        if module.params['legacy_range'] is not None:
+            module.fail_json(
+                msg     = "mode is auto but legacy_range is defined.",
+                changed = False
+            )
+        if module.params['subnets'] is not None:
+            module.fail_json(
+                msg     = "mode is auto but subnet definitions are given.",
+                changed = False
+            )
+        if module.params['subnet_policy'] is not None:
+            module.fail_json(
+                msg     = "mode is auto but subnet_policy is defined.",
+                changed = False
+            )
+        return
+    if module.params['mode'] == 'legacy':
+        if module.params['subnets'] is not None:
+            module.fail_json(
+                msg     = "mode is legacy but subnet definitions are given.",
+                changed = False
+            )
+        return
+
+def list_gce_subnets(gce_connection):
+    gce_subnets = gce_connection.ex_list_subnetworks()
+
+    results = []
+    for gce_subnet in gce_subnets:
+        result = dict()
+        result['name'] = gce_subnet.name
+        result['network'] = gce_subnet.network.name
+        result['region'] = gce_subnet.region.name
+        result['range'] = gce_subnet.cidr
+        result['description'] = gce_subnet.extra['description']
+        results.append(result)
+    return results
+
+def filter_subnets(subnets, name=None, network=None, region=None, cidr=None):
+    if network is not None:
+        subnets = [ subnet for subnet in subnets if subnet['network'] == network ]
+    if region is not None:
+        subnets = [ subnet for subnet in subnets if subnet['region'] == region ]
+    if cidr is not None:
+        subnets = [ subnet for subnet in subnets if subnet['cidr'] == cidr ]
+        subnets = [ subnet for subnet in subnets if subnet['region'] == region ]
+    if name is not None:
+        subnets = [ subnet for subnet in subnets if subnet['name'] == name ]
+
+    return subnets
+
 
 ################################################################################
 # Main
@@ -219,28 +303,31 @@ def main():
 
     module = AnsibleModule(
         argument_spec = dict(
-            name                  = dict(required=True),
-            mode                  = dict(default='auto', choices=['legacy', 'auto', 'custom']),
-            subnet_name           = dict(),
-            subnet_region         = dict(),
-            subnet_desc           = dict(),
-            ipv4_range            = dict(),
-            state                 = dict(default='present', choices=['present', 'absent']),
+            name                  = dict(required=True, type='str'),
+            mode                  = dict(default='auto', choices=['legacy', 'auto', 'custom'], type='str'),
+            legacy_range          = dict(type='str'),
+            subnets               = dict(type='list'),
+            subnet_policy         = dict(choices=['ignore_strays', 'include_strays'], type='str'),
+            state                 = dict(default='present', choices=['present', 'absent'], type='str'),
         ),
         required_if = [
-            ('mode', 'custom', ['subnet_name', 'ipv4_range', 'subnet_region']),
-            ('mode', 'legacy', ['ipv4_range']),
+            ('mode', 'custom', ['subnets', 'subnet_policy']),
+            ('mode', 'legacy', ['legacy_range']),
         ],
-        required_together = ['subnet_name', 'subnet_region'],
+        mutually_exclusive = [
+            ['subnets', 'legacy_range'],
+        ]
     )
+
+    # perform further checks on the argument_spec
+    further_checks(module)
 
     params = {
         'name':          module.params['name'],
         'mode':          module.params['mode'],
-        'subnet_name':   module.params['subnet_name'],
-        'subnet_region': module.params['subnet_region'],
-        'subnet_desc':   module.params['subnet_desc'],
-        'ipv4_range':    module.params['ipv4_range'],
+        'legacy_range':  module.params['legacy_range'],
+        'subnets':       module.params['subnets'],
+        'subnet_policy': module.params['subnet_policy'],
         'state':         module.params['state'],
     }
 
@@ -255,10 +342,17 @@ def main():
             network = gce.ex_get_network(params['name'])
         except ResourceNotFoundError:
             # user wants to create a new network that doesn't yet exist
-            args = [params['ipv4_range'] if params['mode'] =='legacy' else None]
-            kwargs = {'mode': params['mode']}
-            network = gce.ex_create_network(params['name'], *args, **kwargs)
-            changed = True
+            cidr = params['legacy_range'] if params['mode'] =='legacy' else None
+            try:
+                network = gce.ex_create_network(params['name'], cidr, mode=params['mode'])
+            except InvalidRequestError as e:
+                # probably the supplied cidr was incorrect
+                module.fail_json(
+                    msg     = str(e),
+                    changed = False
+                )
+            else:
+                changed = True
         else:
             # libcloud currently does not support switching a network from auto
             # to custom mode.
@@ -275,62 +369,175 @@ def main():
                     changed = False
                 )
 
+        # SUBNETS
         if params['mode'] == 'custom':
-            try:
-                subnet = gce.ex_get_subnetwork(params['subnet_name'], region=params['subnet_region'])
-            except ResourceNotFoundError:
-                # user also wants to create a new subnet
-                subnet = gce.ex_create_subnetwork(params['subnet_name'], cidr=params['ipv4_range'],
-                    network=params['name'], region=params['subnet_region'], description=params['subnet_desc'])
-                changed = True
-            else:
-                # check if the subnet we found belongs to a different network,
-                # the name we try to give to the new subnet already exists
-                if subnet.network != params['name']:
-                    module.fail_json(
-                        msg     = "A subnet named '%s' already exists." % params['subnet_name'],
-                        changed = False
-                    )
+            # below keep in mind that a subnet is uniquelly identified by the tuple (name,region)
 
-                # GCE does not allow changing subnet description or region.
-                # Changing the region makes no sense and changing the description
-                # is close to useless, so we will not support deleting/inserting,
-                # ie updating the subnet for these options.
-                if subnet.extra['description'] != params['description'] or subnet.extra['region'] != params['region']:
-                    module.fail_json(
-                        msg     = "Google Cloud does not support changing the region or the description of a route.",
-                        changed = False
-                    )
+            # gce_ variable prefix below denots stuff on the cloud.
+            gce_subnets = list_gce_subnets(gce)
 
-                # libcloud currently does not support expanding the subnet.
-                if subnet.extra['description'] != params['']:
+            if  params['subnet_policy'] == 'include_strays':
+                # if there are subnets on GCE that are not mentioned in the argument_spec,
+                # we should destroy them before configuring new ones (due to quotas, etc)
+                # So, get all subnet on the target network.
+                gce_nw_subnets = filter_subnets(gce_subnets, network=params['name'])
+
+                for gce_nw_subnet in gce_nw_subnets:
+                    # We filter the user provided subnets to see if the subnet on GCE is actually
+                    # included in the argument_spec.
+                    found = filter_subnets(params['subnets'], name=gce_nw_subnet['name'], region=gce_nw_subnet['region'])
+
+                    # If the subnet on GCE is not also described in the argument_spec, destroy it.
+                    if len(found) == 0:
+                        try:
+                            gce_nw_subnet = gce.ex_get_subnetwork(gce_nw_subnet['name'], region=gce_nw_subnet['region'])
+                            gce.ex_destroy_subnetwork(gce_nw_subnet.name, region=gce_nw_subnet.region)
+                        # for some reason libcloud raises InvalidRequestError when is should be raising ResourceInUseError
+                        except (ResourceInUseError, InvalidRequestError):
+                            module.fail_json(
+                                msg = "Destroying subnet %s due to include_strays subnet_policy failed because there are instances running" % gce_nw_subnet.name\
+                                      + "on that subnet. Other changes may have already occured (check if 'changed': 'true' in the return values)."
+                            )
+                        else:
+                            changed = True
+
+
+            # create or update the defined subnets
+            for subnet in params['subnets']:
+                # See if subnet already exists. gce_subnet will contain 0 or 1 items only due to the tuple.
+                gce_subnet = filter_subnets(gce_subnets, name=subnet['name'], region=subnet['region'])
+
+                # it does not exist, so create it
+                if len(gce_subnet) == 0:
+                    try:
+                        gce.ex_create_subnetwork(subnet['name'], cidr=subnet['range'],
+                            network=params['name'], region=subnet['region'], description=subnet['description'])
+                    except InvalidRequestError as e:
+                        # probably the supplied cidr was incorrect or conflicts with existing subnet
+                        module.fail_json(
+                            msg     = str(e),
+                            changed = False
+                        )
+                    else:
+                        changed = True
+
+                # it exists, but on another network
+                elif gce_subnet[0]['network'] != params['name']:
                     module.fail_json(
-                        msg     = "Currently expanding the subnet through Ansible is not supported",
+                        msg     = "A subnet named '%s' already exists on another network (%s)." % (subnet['name'], gce_subnet[0]['network']),
                         changed = False
                     )
+                # it exists on our network, now check if anything has changed
+                else:
+                    # flatten the list (it becomes a dict)
+                    gce_subnet = gce_subnet[0]
+
+                    # GCE does not allow changing subnet description or region.
+                    # Changing the region makes no sense and changing the description
+                    # is close to useless, so we will not support deleting/inserting,
+                    # ie updating the subnet for these options.
+                    if gce_subnet['description'] != subnet['description'] or gce_subnet['region'] != subnet['region']:
+                        module.fail_json(
+                            msg     = "Google Cloud does not support changing the region or the description of a route.",
+                            changed = False
+                        )
+
+                    # libcloud currently does not support expanding the subnet.
+                    if gce_subnet['range'] != subnet['range']:
+                        module.fail_json(
+                            msg     = "Currently, Ansible does not support expanding the subnet range. " + \
+                                      "Other modifications on the subnet range are not allowed by GCE.",
+                            changed = False
+                        )
+
+                    # no_update is possible with libcloud 2.0.0.
 
     if params['state'] == 'absent':
-        if params['subnet_name']:
-            subnet = None
-            try:
-                subnet = gce.ex_get_subnetwork(params['subnet_name'], region=params['subnet_region'])
-            except ResourceNotFoundError:
-                pass
-            if subnet:
-                gce.ex_destroy_subnetwork(subnet)
-                changed = True
-        elif params['name']:
-            network = None
-            try:
-                network = gce.ex_get_network(params['name'])
-            except ResourceNotFoundError:
-                pass
-            if network:
-                gce.ex_destroy_network(network)
-                changed = True
+
+        try:
+            network = gce.ex_get_network(params['name'])
+        except ResourceNotFoundError:
+            pass
+        else:
+            # If the network mode is different to the one specified, the destruction will fail
+            if network.mode != params['mode']:
+                module.fail_json(
+                    msg     = "Network %s has a mode of %s on GCE but it is specified in task as mode: %s." \
+                              % (params['name'], network.mode, params['mode']),
+                    changed = False
+                )
+
+            if params['mode'] == 'custom':
+                # gce_ variable prefix below denots stuff on the cloud.
+                gce_subnets = list_gce_subnets(gce)
+
+                # Get all the subnets in the network that exists on GCE.
+                gce_nw_subnets = filter_subnets(gce_subnets, network=params['name'])
+
+                # Destroy only the subnets that are specified in the argument_spec
+                if params['subnet_policy'] == 'ignore_strays':
+                    for gce_nw_subnet in gce_nw_subnets:
+                        # We filter the user provided subnets to see if the subnet on GCE is actually
+                        # included in the argument_spec.
+                        found = filter_subnets(params['subnets'], name=gce_nw_subnet['name'], region=gce_nw_subnet['region'])
+
+                        # If there is even one subnet on GCE that is missing from the argument_spec, then fail.
+                        if len(found) != 0:
+                            module.fail_json(
+                                msg     = "subnet_policy=ignore_strays but there are subnets on the network '%s' not specified locally "\
+                                          "and destroying the network will fail. Set subnet_policy=include_strays to destroy all subnets regardless.",
+                                changed = False
+                            )
+                            break
+
+                    # no stray subnet found on GCE, so proceed
+                    for subnet in params['subnet']:
+                        try:
+                            subnet = gce.ex_get_subnetwork(subnet['name'], region=subnet['region'])
+                        except ResourceNotFoundError:
+                            pass
+                        else:
+                            try:
+                                gce.ex_destroy_subnetwork(subnet)
+                            # for some reason libcloud raises InvalidRequestError when is should be raising ResourceInUseError
+                            except (ResourceInUseError, InvalidRequestError):
+                                module.fail_json(
+                                    msg = "Destroying subnet %s failed because there are instances running on that subnet. " % subnet.name\
+                                          + "Other changes may have already occured (check if 'changed': 'true in the return values)."
+                                )
+                            else:
+                                change = True
+
+                else:
+                    # Note: If we have already destroyed all subnets on previous run, gce_nw_subnets will be empty
+                    for gce_nw_subnet in gce_nw_subnets:
+                        try:
+                            subnet = gce.ex_get_subnetwork(gce_nw_subnet['name'], region=gce_nw_subnet['region'])
+                        except ResourceNotFoundError:
+                            # We will never be in here, but let's leave it for completeness
+                            pass
+                        else:
+                            try:
+                                gce.ex_destroy_subnetwork(subnet)
+                            # for some reason libcloud raises InvalidRequestError when is should be raising ResourceInUseError
+                            except (ResourceInUseError, InvalidRequestError):
+                                pprint(subnet)
+                                module.fail_json(
+                                    msg = "Destroying subnet %s failed because there are instances running on that subnet. " % subnet.name\
+                                          + "Other changes may have already occured (check if 'changed': 'true' in the return values)."
+                                )
+                            else:
+                                changed = True
+
+            # NETWORK
+            gce.ex_destroy_network(network)
+            changed = True
+
 
     json_output = {'changed': changed}
-    json_output.update(params)
+    for value in params:
+        if params[value] != None:
+            json_output[value] = params[value]
 
     module.exit_json(**json_output)
 
