@@ -243,22 +243,26 @@ def check_allowed(allowed_string, module):
                 if (port.count("-") == 1):
                     port = port.split('-')
 
-                    if not port[0].isdigit():
-                        msg = "In option 'allowed', the '%s' protocol definition has an invalid port ('%s')." % (allowed, port[0]) \
-                            + instructions
-                    elif not (0 <= int(port[0]) <= 65535):
-                        msg = "In option 'allowed', the '%s' protocol definition has an invalid port ('%s') outside the [0-65535] range." % (allowed, port[0]) \
-                        + instructions
-
-                    elif not port[1].isdigit():
+                    if not port[1].isdigit():
                         msg = "In option 'allowed', the '%s' protocol definition has an invalid port ('%s')." % (allowed, port[1]) \
                             + instructions
                     elif not (0 <= int(port[1]) <= 65535):
                         msg = "In option 'allowed', the '%s' protocol definition has an invalid port ('%s') outside the [0-65535] range." % (allowed, port[1]) \
                         + instructions
 
+                    elif not port[0].isdigit():
+                        msg = "In option 'allowed', the '%s' protocol definition has an invalid port ('%s')." % (allowed, port[0]) \
+                            + instructions
+                    elif not (0 <= int(port[0]) <= 65535):
+                        msg = "In option 'allowed', the '%s' protocol definition has an invalid port ('%s') outside the [0-65535] range." % (allowed, port[0]) \
+                        + instructions
+
                     # the range end must be larger that the range start, eg 500-33 or 22-22 are invalid
-                    if int(port[0]) >= int(port[1]):
+                    if msg == '' and int(port[0]) >= int(port[1]):
+                        # we checked for msg == '' because we only fail at the end of the function. This means
+                        # that we might have port[0]=abc which is not a valid numeral, this will be caught by
+                        # the previous checks but since we haven't failed yet we will reach here and say int(port[0])
+                        # which will fail.
                         msg = "In option 'allowed', the '%s' protocol definition has an invalid port range ('%s-%s', range end is less than range start)." % (allowed, port[0], port[1]) \
                             + instructions
     if msg:
@@ -268,6 +272,8 @@ def check_parameter_format(module):
     # All the below checks are performed to allow check_mode to give reliable results.
     # Otherwise, we could handle the exceptions raised by libcloud and skip doing
     # duplicate work here.
+
+    msg =''
 
     # Starts with lowercase letter, contains only lowercase letters, nubmers, hyphens,
     # cannot be empty, cannot end with hyphen. Taken directly for GCE error responses.
@@ -279,18 +285,12 @@ def check_parameter_format(module):
     # check the firewall rule name.
     matches = re.match(name_regexp, module.params['name']);
     if not matches:
-        module.fail_json(
-            msg     = "Firewall name must start with a lowercase letter, can contain only lowercase letters, " \
-                      + "numbers and hyphens, cannot end with a hyphen and cannot be empty.",
-            changed = False
-        )
+        msg = "Firewall name must start with a lowercase letter, can contain only lowercase letters, " \
+            + "numbers and hyphens, cannot end with a hyphen and cannot be empty."
 
     # check if src_ranges is set when src_tags is not (not covered by the above)
     if module.params['src_tags'] is None and module.params['src_ranges'] is None:
-        module.fail_json(
-            msg     = "missing required arguments: src_ranges",
-            changed = False
-        )
+        msg = "missing required arguments: src_ranges"
 
     # check if given source tags are syntactically valid
     if module.params['src_tags'] is not None:
@@ -298,11 +298,8 @@ def check_parameter_format(module):
             matches = re.match(name_regexp, tag)
 
             if not matches:
-                module.fail_json(
-                    msg     = "Source tags must start with a lowercase letter, can contain only lowercase letters, " \
-                              + "numbers and hyphens, cannot end with a hyphen and cannot be empty.",
-                    changed = False
-                )
+                msg = "Source tags must start with a lowercase letter, can contain only lowercase letters, " \
+                    + "numbers and hyphens, cannot end with a hyphen and cannot be empty."
 
     # check if target tags are syntactically valid
     if module.params['target_tags'] is not None:
@@ -310,11 +307,8 @@ def check_parameter_format(module):
             matches = re.match(name_regexp, tag)
 
             if not matches:
-                module.fail_json(
-                    msg     = "Target tags must start with a lowercase letter, can contain only lowercase letters, " \
-                              + "numbers and hyphens, cannot end with a hyphen and cannot be empty.",
-                    changed = False
-                )
+                msg = "Target tags must start with a lowercase letter, can contain only lowercase letters, " \
+                    + "numbers and hyphens, cannot end with a hyphen and cannot be empty."
 
     # check if the source range is a valid cidr
     if module.params['src_ranges'] is not None:
@@ -322,10 +316,10 @@ def check_parameter_format(module):
             matches = re.match(cidr_regexp, cidr)
 
             if not matches:
-                module.fail_json(
-                    msg     = "src_ranges must be a list of valid cidr ranges, range '%s' is invalid" % cidr,
-                    changed = False
-                )
+                msg = "src_ranges must be a list of valid cidr ranges, range '%s' is invalid" % cidr
+
+    if msg:
+        module.fail_json(msg = msg, changed = False)
 
     check_allowed(module.params['allowed'], module)
 
