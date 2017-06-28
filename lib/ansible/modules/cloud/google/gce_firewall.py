@@ -140,13 +140,13 @@ state:
 
 self_link:
     description: firewall resource uri on GCE
-    returned: success
+    returned: always
     type: string
     sample: https://www.googleapis.com/compute/v1/projects/myproject/global/firewalls/myrule
 
 creation_time:
-    description: route creation/update timestamp
-    returned: success
+    description: firewall rule creation timestamp
+    returned: always
     type: string
     sample: 2017-06-28T10:59:59.698-07:00
 '''
