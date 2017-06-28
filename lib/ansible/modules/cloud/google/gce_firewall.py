@@ -289,7 +289,7 @@ def check_parameter_format(module):
 
     # Starts with lowercase letter, contains only lowercase letters, nubmers, hyphens,
     # cannot be empty, cannot end with hyphen. Taken directly for GCE error responses.
-    name_regexp = r"(?:[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?)"
+    name_regexp = r"^(?:[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?)$"
 
     # cidr range regexp. Using a regexp to avoid loading extra python dependencies (ipaddr)
     cidr_regexp = r"^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$"
