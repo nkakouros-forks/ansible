@@ -521,7 +521,6 @@ def main():
                                 gce.ex_destroy_subnetwork(subnet)
                             # for some reason libcloud raises InvalidRequestError when is should be raising ResourceInUseError
                             except (ResourceInUseError, InvalidRequestError):
-                                pprint(subnet)
                                 module.fail_json(
                                     msg = "Destroying subnet %s failed because there are instances running on that subnet. " % subnet.name\
                                           + "Other changes may have already occured (check if 'changed': 'true' in the return values)."
