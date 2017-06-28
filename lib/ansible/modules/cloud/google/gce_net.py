@@ -235,34 +235,33 @@ def check_subnet_spec(module):
             )
 
 def additional_checks(module):
+    msg = ''
+
+    # check length of description (must be less than 2048 characters)
+    if len(unicode(module.params['description'], "utf-8")) > 2048:
+        msg = "Description must be less thatn 2048 characters in length."
+
     # AnsibleModule doesn't provide a way to apply constraints in sub-dicts in argument_spec
     if module.params['mode'] == 'custom':
         check_subnet_spec(module)
-        return
+
     if module.params['mode'] == 'auto':
         if module.params['legacy_range'] is not None:
-            module.fail_json(
-                msg     = "mode is auto but legacy_range is defined.",
-                changed = False
-            )
+            msg = "mode is auto but legacy_range is defined."
+
         if module.params['subnets'] is not None:
-            module.fail_json(
-                msg     = "mode is auto but subnet definitions are given.",
-                changed = False
-            )
+            msg = "mode is auto but subnet definitions are given."
+
         if module.params['subnet_policy'] is not None:
-            module.fail_json(
-                msg     = "mode is auto but subnet_policy is defined.",
-                changed = False
-            )
-        return
+            msg = "mode is auto but subnet_policy is defined."
+
     if module.params['mode'] == 'legacy':
         if module.params['subnets'] is not None:
-            module.fail_json(
-                msg     = "mode is legacy but subnet definitions are given.",
-                changed = False
-            )
-        return
+            msg = "mode is legacy but subnet definitions are given."
+
+    if msg:
+        module.fail_json(msg = msg, changed = True)
+
 
 def list_gce_subnets(gce_connection):
     gce_subnets = gce_connection.ex_list_subnetworks()
