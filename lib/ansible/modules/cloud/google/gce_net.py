@@ -234,7 +234,7 @@ def check_subnet_spec(module):
                 changed = False
             )
 
-def further_checks(module):
+def additional_checks(module):
     # AnsibleModule doesn't provide a way to apply constraints in sub-dicts in argument_spec
     if module.params['mode'] == 'custom':
         check_subnet_spec(module)
@@ -320,7 +320,7 @@ def main():
     )
 
     # perform further checks on the argument_spec
-    further_checks(module)
+    additional_checks(module)
 
     params = {
         'name':          module.params['name'],
