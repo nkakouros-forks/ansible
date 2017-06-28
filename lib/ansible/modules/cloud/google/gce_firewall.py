@@ -148,7 +148,7 @@ try:
     from libcloud.compute.providers import Provider
     from libcloud.common.google import GoogleBaseError, QuotaExceededError, \
             ResourceExistsError, ResourceNotFoundError
-    from pprint import pprint
+
     _ = Provider.GCE
     HAS_LIBCLOUD = True
 except ImportError:
