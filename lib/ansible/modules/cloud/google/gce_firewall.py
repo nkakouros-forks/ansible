@@ -288,7 +288,7 @@ def check_parameter_format(module):
         msg = "Firewall name must start with a lowercase letter, can contain only lowercase letters, " \
             + "numbers and hyphens, cannot end with a hyphen and cannot be empty."
 
-    # check if src_ranges is set when src_tags is not (not covered by the above)
+    # check if src_ranges is set when src_tags is not (not covered by AnsibleModule checks)
     if module.params['src_tags'] is None and module.params['src_ranges'] is None:
         msg = "missing required arguments: src_ranges"
 
@@ -302,7 +302,7 @@ def check_parameter_format(module):
                     + "numbers and hyphens, cannot end with a hyphen and cannot be empty."
 
     # check if target tags are syntactically valid
-    if module.params['target_tags'] is not None:
+    if module.params['target_tags'] != 'all':
         for tag in module.params['target_tags']:
             matches = re.match(name_regexp, tag)
 
