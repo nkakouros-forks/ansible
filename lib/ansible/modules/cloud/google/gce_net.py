@@ -195,6 +195,7 @@ except ImportError:
 try:
     # module specific imports
     from distutils.version import LooseVersion
+    import re
 
     # import module snippets
     from ansible.module_utils.basic import AnsibleModule
@@ -246,12 +247,8 @@ def check_subnet_spec(module):
                 changed = False
             )
 
-def additional_checks(module):
+def additional_constraint_checks(module):
     msg = ''
-
-    # check length of description (must be less than 2048 characters)
-    if len(unicode(module.params['description'], "utf-8")) > 2048:
-        msg = "Description must be less thatn 2048 characters in length."
 
     # AnsibleModule doesn't provide a way to apply constraints in sub-dicts in argument_spec
     if module.params['mode'] == 'custom':
@@ -270,6 +267,69 @@ def additional_checks(module):
     if module.params['mode'] == 'legacy':
         if module.params['subnets'] is not None:
             msg = "mode is legacy but subnet definitions are given."
+
+    if msg:
+        module.fail_json(msg = msg, changed = True)
+
+def check_parameter_format(module):
+    # All the below checks are performed to allow check_mode to give reliable results.
+    # Otherwise, we could handle the exceptions raised by libcloud and skip doing
+    # duplicate work here.
+    msg =''
+
+    # Starts with lowercase letter, contains only lowercase letters, nubmers, hyphens,
+    # cannot be empty, cannot end with hyphen. Taken directly for GCE error responses.
+    name_regexp = r"(?:[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?)"
+
+    # cidr range regexp. Using a regexp to avoid loading extra python dependencies (ipaddr)
+    cidr_regexp = r"^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$"
+
+    # check the firewall rule name.
+    matches = re.match(name_regexp, module.params['name']);
+    if not matches:
+        msg = "Network name must start with a lowercase letter, can contain only lowercase letters, " \
+            + "numbers and hyphens, cannot end with a hyphen and cannot be empty."
+
+    # check legacy_range
+    if module.params['legacy_range'] is not None:
+        matches = re.match(cidr_regexp, module.params['legacy_range'])
+        if not matches:
+            msg = "legacy_range must be a valid cidr range, '%s' is invalid" % module.params['legacy_range']
+
+    if msg:
+        module.fail_json(msg = msg, changed = True)
+
+def check_subnet_parameters(module, gce_connection):
+    msg = ''
+
+    # Starts with lowercase letter, contains only lowercase letters, nubmers, hyphens,
+    # cannot be empty, cannot end with hyphen. Taken directly for GCE error responses.
+    name_regexp = r"^(?:[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?)$"
+
+    # cidr range regexp. Using a regexp to avoid loading extra python dependencies (ipaddr)
+    cidr_regexp = r"^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$"
+
+    for subnet in module.params['subnets']:
+        # check length of description (must be less than 2048 characters)
+        if 'description' in subnet and len(unicode(subnet['description'], "utf-8")) > 2048:
+            msg = "Description must be less thatn 2048 characters in length."
+
+        # check name
+        matches = re.match(name_regexp, subnet['name']);
+        if not matches:
+            msg = "Subnet name is invalid for subnet '%s'. Subnet name must start with a lowercase letter, "  % subnet['name'] \
+                + "can contain only lowercase letters, numbers and hyphens, cannot end with a hyphen and cannot be empty."
+
+        # check range
+        matches = re.match(cidr_regexp, subnet['range'])
+        if not matches:
+            msg = "subnet range must be a valid cidr range, '%s' is invalid for subnet %s" % (subnet['range'], subnet['name'])
+
+        # check region
+        try:
+            gce_connection.ex_get_region(subnet['region'])
+        except ResourceNotFoundError:
+            msg = "subnet region is invalid (%s) for subnet '%s'" % (subnet['region'], subnet['name'])
 
     if msg:
         module.fail_json(msg = msg, changed = True)
@@ -331,7 +391,14 @@ def main():
     )
 
     # perform further checks on the argument_spec
-    additional_checks(module)
+    additional_constraint_checks(module)
+
+    gce = gce_connect(module, PROVIDER)
+
+    check_parameter_format(module)
+
+    if module.params['subnets'] is not None:
+        check_subnet_parameters(module, gce)
 
     params = {
         'name':          module.params['name'],
@@ -342,7 +409,6 @@ def main():
         'state':         module.params['state'],
     }
 
-    gce = gce_connect(module, PROVIDER)
 
     if params['state'] == 'present':
         network = None
