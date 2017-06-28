@@ -137,6 +137,18 @@ state:
     returned: always
     type: string
     sample: "present"
+
+self_link:
+    description: firewall resource uri on GCE
+    returned: success
+    type: string
+    sample: https://www.googleapis.com/compute/v1/projects/myproject/global/firewalls/myrule
+
+creation_time:
+    description: route creation/update timestamp
+    returned: success
+    type: string
+    sample: 2017-06-28T10:59:59.698-07:00
 '''
 
 ################################################################################
@@ -450,7 +462,7 @@ def main():
         except ResourceNotFoundError:
             # Firewall rule not found so we try to create it.
             if not module.check_mode:
-                gce.ex_create_firewall(params['name'], allowed_list, network=params['network'],
+                fw = gce.ex_create_firewall(params['name'], allowed_list, network=params['network'],
                     source_ranges=params['src_ranges'], source_tags=params['src_tags'], target_tags=params['target_tags'])
             changed = True
         else:
@@ -515,7 +527,7 @@ def main():
 
             if changed is True:
                 if not module.check_mode:
-                    gce.ex_update_firewall(fw)
+                    fw = gce.ex_update_firewall(fw)
 
     if params['state'] == 'absent':
         if params['name']:
@@ -533,6 +545,13 @@ def main():
     for value in params:
         if params[value] != None:
             json_output[value] = params[value]
+
+
+    # add extra return values
+    extra = dict()
+    extra['self_Link'] = fw.extra['selfLink']
+    extra['creation_time'] = fw.extra['creationTimestamp']
+    json_output.update(extra)
 
     module.exit_json(**json_output)
 
