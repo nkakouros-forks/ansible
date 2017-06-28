@@ -162,6 +162,18 @@ state:
     returned: always
     type: string
     sample: "present"
+
+self_link:
+    description: firewall resource uri on GCE
+    returned: always
+    type: string
+    sample: https://www.googleapis.com/compute/v1/projects/myproject/global/networks/mynet
+
+creation_time:
+    description: network creation timestamp
+    returned: always
+    type: string
+    sample: 2017-06-28T10:59:59.698-07:00
 '''
 
 ################################################################################
@@ -536,6 +548,13 @@ def main():
     for value in params:
         if params[value] != None:
             json_output[value] = params[value]
+
+
+    # add extra return values
+    extra = dict()
+    extra['self_Link'] = network.extra['selfLink']
+    extra['creation_time'] = network.extra['creationTimestamp']
+    json_output.update(extra)
 
     module.exit_json(**json_output)
 
