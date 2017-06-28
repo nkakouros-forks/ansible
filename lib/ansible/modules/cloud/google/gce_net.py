@@ -145,8 +145,17 @@ legacy_range:
     type: string
     sample: "10.0.0.0/16"
 
+gateway_ip:
+    description: the gateway IP of the legacy network
+    returned: when I(mode=legacy)
+    type: string
+    sample: 10.240.0.1
+
 subnets:
-    description: the subnets that were specified (see the I(subnets) option for more details)
+    description:
+        - The subnets that were specified (see the I(subnets) option for available keys).
+        - In addition, the following extra keys will also be returned: creation_time, gateway_address, self_link
+        - See other return values with the same name for more information
     returned: when I(mode=custom)
     type: dict
     sample: "my-subnetwork"
@@ -340,13 +349,18 @@ def list_gce_subnets(gce_connection):
 
     results = []
     for gce_subnet in gce_subnets:
-        result = dict()
-        result['name'] = gce_subnet.name
-        result['network'] = gce_subnet.network.name
-        result['region'] = gce_subnet.region.name
-        result['range'] = gce_subnet.cidr
-        result['description'] = gce_subnet.extra['description']
+        result                               = dict()
+        result['name']                       = gce_subnet.name
+        result['network']                    = gce_subnet.network.name
+        result['region']                     = gce_subnet.region.name
+        result['range']                      = gce_subnet.cidr
+        result['description']                = gce_subnet.extra['description']
+        result['extra']                      = dict()
+        result['extra']['creation_time'] = gce_subnet.extra['creationTimestamp']
+        result['extra']['gateway_address']    = gce_subnet.extra['gatewayAddress']
+        result['extra']['self_link']          = gce_subnet.extra['selfLink']
         results.append(result)
+
     return results
 
 def filter_subnets(subnets, name=None, network=None, region=None, cidr=None):
@@ -478,6 +492,8 @@ def main():
                         else:
                             changed = True
 
+            # this will hold all the subnet that we operated on to use on json_output, nothing else
+            passed_subnets = []
 
             # create or update the defined subnets
             for subnet in params['subnets']:
@@ -487,10 +503,10 @@ def main():
                 # it does not exist, so create it
                 if len(gce_subnet) == 0:
                     try:
-                        gce.ex_create_subnetwork(subnet['name'], cidr=subnet['range'],
+                        gce_subnet = gce.ex_create_subnetwork(subnet['name'], cidr=subnet['range'],
                             network=params['name'], region=subnet['region'], description=subnet['description'])
                     except InvalidRequestError as e:
-                        # probably the supplied cidr was incorrect or conflicts with existing subnet
+                        # probably the supplied cidrconflicts with existing subnet
                         module.fail_json(
                             msg     = str(e),
                             changed = False
@@ -528,6 +544,8 @@ def main():
                         )
 
                     # no_update is possible with libcloud 2.0.0.
+
+                passed_subnets.append(gce_subnet)
 
     if params['state'] == 'absent':
 
@@ -567,6 +585,9 @@ def main():
                             )
                             break
 
+                    # this will hold all the subnet that we operated on to use on json_output, nothing else
+                    passed_subnets = []
+
                     # no stray subnet found on GCE, so proceed
                     for subnet in params['subnet']:
                         try:
@@ -584,6 +605,8 @@ def main():
                                 )
                             else:
                                 change = True
+
+                        passed_subnets.append(subnet)
 
                 else:
                     # Note: If we have already destroyed all subnets on previous run, gce_nw_subnets will be empty
@@ -616,11 +639,19 @@ def main():
             json_output[value] = params[value]
 
 
-    # add extra return values
+    # add extra network return values
     extra = dict()
     extra['self_Link'] = network.extra['selfLink']
     extra['creation_time'] = network.extra['creationTimestamp']
+    if 'gatewayIPv4' in network.extra:
+        extra['gateway_ip'] = network.extra['gatewayIPv4']
+
     json_output.update(extra)
+
+    # add extra subnet return values
+    if params['mode'] == 'custom':
+        for index, subnet in enumerate(passed_subnets):
+            json_output['subnets'][index].update(subnet['extra'])
 
     module.exit_json(**json_output)
 
