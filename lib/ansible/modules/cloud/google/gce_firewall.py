@@ -166,19 +166,13 @@ try:
 except ImportError:
     HAS_LIBCLOUD = False
 
-try:
-    # module specific imports
-    from distutils.version import LooseVersion
-    import re
+# module specific imports
+from distutils.version import LooseVersion
+import re
 
-    # import module snippets
-    from ansible.module_utils.basic import AnsibleModule
-    from ansible.module_utils.gce import gce_connect
-except:
-    module.fail_json(
-        msg     = "An unexpected error has occured while importing asible libraries.",
-        changed = False
-    )
+# import module snippets
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.gce import gce_connect
 
 
 ################################################################################
