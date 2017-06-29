@@ -93,6 +93,9 @@ notes:
     - Subnets in custom mode are not allowed to have overlapping cidr ranges.
       Eg, a subnet with range: 10.0.0.0/20 and one with range: 10.0.0.0/16 will trigger an errror.
     - Subnets that carry instances cannot be destroyed unless the instances are destroye first. Use M(gce) module for that.
+    - Although this module supports check mode, there is one case when check_mode will report inconsistent results.
+      The first is when you try to destroy a subnet that contains instances. This cannot be checked before trying and it is a
+      limitation of the Google Cloud API
 '''
 
 EXAMPLES = '''
@@ -201,19 +204,13 @@ try:
 except ImportError:
     HAS_LIBCLOUD = False
 
-try:
-    # module specific imports
-    from distutils.version import LooseVersion
-    import re
+# module specific imports
+from distutils.version import LooseVersion
+import re
 
-    # import module snippets
-    from ansible.module_utils.basic import AnsibleModule
-    from ansible.module_utils.gce import gce_connect
-except:
-    module.fail_json(
-        msg     = "An unexpected error has occured while importing asible libraries.",
-        changed = False
-    )
+# import module snippets
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.gce import gce_connect
 
 
 ################################################################################
@@ -230,7 +227,7 @@ PROVIDER = Provider.GCE
 # Functions
 ################################################################################
 
-def check_libcloud():
+def check_libs():
     # Apache libcloud needs to be installed and at least the minimum version.
     if not HAS_LIBCLOUD:
         module.fail_json(
@@ -280,7 +277,7 @@ def additional_constraint_checks(module):
     if msg:
         module.fail_json(msg = msg, changed = True)
 
-def check_parameter_format(module):
+def check_parameters(module):
     # All the below checks are performed to allow check_mode to give reliable results.
     # Otherwise, we could handle the exceptions raised by libcloud and skip doing
     # duplicate work here.
@@ -343,7 +340,6 @@ def check_subnet_parameters(module, gce_connection):
     if msg:
         module.fail_json(msg = msg, changed = True)
 
-
 def list_gce_subnets(gce_connection):
     gce_subnets = gce_connection.ex_list_subnetworks()
 
@@ -384,7 +380,7 @@ def filter_subnets(subnets, name=None, network=None, region=None, cidr=None):
 def main():
     changed = False
 
-    check_libcloud()
+    check_libs()
 
     module = AnsibleModule(
         argument_spec = dict(
@@ -401,7 +397,8 @@ def main():
         ],
         mutually_exclusive = [
             ['subnets', 'legacy_range'],
-        ]
+        ],
+        supports_check_mode = True,
     )
 
     # perform further checks on the argument_spec
@@ -409,7 +406,7 @@ def main():
 
     gce = gce_connect(module, PROVIDER)
 
-    check_parameter_format(module)
+    check_parameters(module)
 
     if module.params['subnets'] is not None:
         check_subnet_parameters(module, gce)
@@ -506,7 +503,7 @@ def main():
                         gce_subnet = gce.ex_create_subnetwork(subnet['name'], cidr=subnet['range'],
                             network=params['name'], region=subnet['region'], description=subnet['description'])
                     except InvalidRequestError as e:
-                        # probably the supplied cidrconflicts with existing subnet
+                        # probably the supplied cidr conflicts with an existing subnet
                         module.fail_json(
                             msg     = str(e),
                             changed = False
