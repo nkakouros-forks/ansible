@@ -277,6 +277,66 @@ def additional_constraint_checks(module):
     if msg:
         module.fail_json(msg = msg, changed = True)
 
+# The next 4 functions are custom. We did not import ipaddr or ipadress or other
+# libraries because some are unmaintained, python3 incompatible or buggy.
+def get_subnet_id(cidr):
+    address, mask = cidr.split('/')
+
+    # convert netmask to host mask
+    netmask = (0xffffffff >> (32 - int(mask))) << (32 -int(mask))
+
+    # convert address to binary
+    address = address.split('.')
+    for index, part in enumerate(address):
+        address[index] = "{0:08b}".format(int(part))
+    address = ''.join(address)
+
+    network_id = int(address,2) & int(netmask)
+    return network_id
+
+def get_host_id(cidr):
+    address, mask = cidr.split('/')
+
+    # convert netmask to host mask
+    hostmask = (0xffffffff >> (int(mask)))
+
+    # convert address to binary
+    address = address.split('.')
+    for index, part in enumerate(address):
+        address[index] = "{0:08b}".format(int(part))
+    address = ''.join(address)
+    host_id = int(address,2) & int(hostmask)
+
+    return host_id
+
+def check_subnet_id(cidr):
+    # cidr range regexp. Using a regexp to avoid loading extra python dependencies (ipaddr)
+    cidr_regexp = r"^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$"
+
+    # first do a simple value check
+    matches = re.match(cidr_regexp, cidr)
+    if not matches:
+        return 1
+
+    # now check that there is no host id
+    host_id = get_host_id(cidr)
+
+    if host_id:
+        return 2
+
+    return 0
+
+def check_overlapping_subnets(subnet1, subnet2):
+    subnet_id1 = get_subnet_id(subnet1)
+    subnet_id2 = get_subnet_id(subnet2)
+
+    overlap = subnet_id1 & subnet_id2
+
+    if overlap == subnet_id1 or overlap == subnet_id2:
+        return 1
+
+    return 0
+
 def check_parameters(module):
     # All the below checks are performed to allow check_mode to give reliable results.
     # Otherwise, we could handle the exceptions raised by libcloud and skip doing
@@ -287,9 +347,6 @@ def check_parameters(module):
     # cannot be empty, cannot end with hyphen. Taken directly for GCE error responses.
     name_regexp = r"(?:[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?)"
 
-    # cidr range regexp. Using a regexp to avoid loading extra python dependencies (ipaddr)
-    cidr_regexp = r"^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$"
-
     # check the firewall rule name.
     matches = re.match(name_regexp, module.params['name']);
     if not matches:
@@ -298,9 +355,11 @@ def check_parameters(module):
 
     # check legacy_range
     if module.params['legacy_range'] is not None:
-        matches = re.match(cidr_regexp, module.params['legacy_range'])
-        if not matches:
+        result = check_subnet_id(module.params['legacy_range'])
+        if result == 1:
             msg = "legacy_range must be a valid cidr range, '%s' is invalid" % module.params['legacy_range']
+        if result == 2:
+            msg = "legacy_range must not have a host id part"
 
     if msg:
         module.fail_json(msg = msg, changed = True)
@@ -315,6 +374,7 @@ def check_subnet_parameters(module, gce_connection):
     # cidr range regexp. Using a regexp to avoid loading extra python dependencies (ipaddr)
     cidr_regexp = r"^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$"
 
+    previous_subnets = []
     for subnet in module.params['subnets']:
         # check length of description (must be less than 2048 characters)
         if 'description' in subnet and len(unicode(subnet['description'], "utf-8")) > 2048:
@@ -327,9 +387,19 @@ def check_subnet_parameters(module, gce_connection):
                 + "can contain only lowercase letters, numbers and hyphens, cannot end with a hyphen and cannot be empty."
 
         # check range
-        matches = re.match(cidr_regexp, subnet['range'])
-        if not matches:
+        result = check_subnet_id(subnet['range'])
+        if result == 1:
             msg = "subnet range must be a valid cidr range, '%s' is invalid for subnet %s" % (subnet['range'], subnet['name'])
+        if result == 2:
+            msg = "range of subnet %s must not have a host id part" % subnet['name']
+
+        #check overlapping subnets
+        if msg == '':
+            for previous_subnet in previous_subnets:
+                result = check_overlapping_subnets(subnet['range'], previous_subnet['range'])
+                if result:
+                    msg = "subnets cannot overlap, but subnet %s and subnet %s do" % (subnet['name'], previous_subnet['name'])
+            previous_subnets.append(subnet)
 
         # check region
         try:
