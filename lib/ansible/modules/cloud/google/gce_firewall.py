@@ -69,7 +69,7 @@ options
     target_tags:
         description:
             - The target instances that will be protected by this rule.
-        default: all
+            - If not given, the rule will apply to all instances.
     state:
         description:
             - Desired state of the firewall.
@@ -140,13 +140,13 @@ state:
 
 self_link:
     description: firewall resource uri on GCE
-    returned: always
+    returned: always, except when state: absent and rule originally does not exist
     type: string
     sample: https://www.googleapis.com/compute/v1/projects/myproject/global/firewalls/myrule
 
 creation_time:
     description: firewall rule creation timestamp
-    returned: always
+    returned: always, except when state: absent and rule originally does not exist
     type: string
     sample: 2017-06-28T10:59:59.698-07:00
 '''
@@ -208,6 +208,9 @@ def check_allowed(allowed_string, module):
         msg = "In option 'allowed', a trailing semicolon is not allowed but one is given."
 
     for allowed in allowed_string.split(';'):
+
+        # strip whitespace that makes regexes fail
+        allowed = allowed.strip()
 
         # if there are more than two colons, eg tcp:80:2222, it is invalid
         if allowed.count(':') >= 2:
@@ -330,13 +333,16 @@ def check_parameter_format(module):
     check_allowed(module.params['allowed'], module)
 
 def check_network_exists(gce_connection, module):
-    try:
-        gce_connection.ex_get_network(module.params['network'])
-    except ResourceNotFoundError:
-        module.fail_json(
-            msg     = "No network '%s' found." % module.params['network'],
-            changed = False
-        )
+    # if state=absent we do not care if the network exists,
+    # just delete whatever is there.
+    if module.params['state'] == 'present':
+        try:
+            gce_connection.ex_get_network(module.params['network'])
+        except ResourceNotFoundError:
+            module.fail_json(
+                msg     = "No network '%s' found." % module.params['network'],
+                changed = False
+            )
 
 def format_allowed_section(allowed):
     """Format each section of the allowed list"""
@@ -401,6 +407,16 @@ def set_empty_defaults(module):
     if module.params['src_ranges'] is None:
         module.params['src_ranges'] = []
 
+    # GCE expects target_tags to be empty in order to apply the rule to all instances.
+    # There was a thought to a default of 'all' which makes sense to the users. But
+    # this would mean that users would not be able to set an instance tag of 'all'.
+    # if len(module.params['target_tags']) == 1 and module.params['target_tags'][0] == 'all':
+    #     module.params['target_tags'] = []
+    # Instead we make an empty target mean 'all intances', exactly like GCE.
+    if module.params['target_tags'] is None:
+        module.params['target_tags'] = []
+
+
 ################################################################################
 # Main
 ################################################################################
@@ -412,11 +428,11 @@ def main():
     module = AnsibleModule(
         argument_spec = dict(
             name        = dict(required=True, type="str"),
-            network     = dict(required=True, type="str"),
-            allowed     = dict(type="str"),
-            src_ranges   = dict(type='list'),
+            network     = dict(default='default', type="str"),
+            allowed     = dict(required=True, type="str"),
+            src_ranges  = dict(type='list'),
             src_tags    = dict(type='list'),
-            target_tags = dict(default='all', type='list'),
+            target_tags = dict(type='list'),
             state       = dict(default='present', choices=['present', 'absent'], type="str"),
         ),
         required_if = [
@@ -428,9 +444,9 @@ def main():
         supports_check_mode = True,
     )
 
-    check_parameter_format(module)
-
     set_empty_defaults(module)
+
+    check_parameter_format(module)
 
     params = {
         'name':        module.params['name'],
@@ -445,6 +461,8 @@ def main():
     gce = gce_connect(module, PROVIDER)
 
     check_network_exists(gce, module)
+
+    fw = None
 
     if params['state'] == 'present':
         allowed_list = format_allowed(params['allowed'])
@@ -543,8 +561,9 @@ def main():
 
     # add extra return values
     extra = dict()
-    extra['self_Link'] = fw.extra['selfLink']
-    extra['creation_time'] = fw.extra['creationTimestamp']
+    if fw is not None:
+        extra['self_Link'] = fw.extra['selfLink']
+        extra['creation_time'] = fw.extra['creationTimestamp']
     json_output.update(extra)
 
     module.exit_json(**json_output)
