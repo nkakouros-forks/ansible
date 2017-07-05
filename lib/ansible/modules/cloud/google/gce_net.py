@@ -491,9 +491,13 @@ def main():
     }
 
 
+    # the created/deleted/updated network object
+    network = None
+
+    # this will hold all the subnet that we operated on to use on json_output, nothing else
+    passed_subnets = []
+
     if params['state'] == 'present':
-        network = None
-        subnet = None
 
         # check if given network and subnet already exist
         try:
@@ -558,9 +562,6 @@ def main():
                             )
                         else:
                             changed = True
-
-            # this will hold all the subnet that we operated on to use on json_output, nothing else
-            passed_subnets = []
 
             # create or update the defined subnets
             for subnet in params['subnets']:
@@ -652,9 +653,6 @@ def main():
                             )
                             break
 
-                    # this will hold all the subnet that we operated on to use on json_output, nothing else
-                    passed_subnets = []
-
                     # no stray subnet found on GCE, so proceed
                     for subnet in params['subnet']:
                         try:
@@ -708,17 +706,19 @@ def main():
 
     # add extra network return values
     extra = dict()
-    extra['self_Link'] = network.extra['selfLink']
-    extra['creation_time'] = network.extra['creationTimestamp']
-    if 'gatewayIPv4' in network.extra:
-        extra['gateway_ip'] = network.extra['gatewayIPv4']
+    if network is not None:
+        extra['self_Link'] = network.extra['selfLink']
+        extra['creation_time'] = network.extra['creationTimestamp']
+        if 'gatewayIPv4' in network.extra:
+            extra['gateway_ip'] = network.extra['gatewayIPv4']
 
     json_output.update(extra)
 
     # add extra subnet return values
-    if params['mode'] == 'custom':
-        for index, subnet in enumerate(passed_subnets):
-            json_output['subnets'][index].update(subnet['extra'])
+    if len(passed_subnets):
+        if params['mode'] == 'custom':
+            for index, subnet in enumerate(passed_subnets):
+                json_output['subnets'][index].update(subnet['extra'])
 
     module.exit_json(**json_output)
 
