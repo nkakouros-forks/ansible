@@ -372,13 +372,21 @@ def format_allowed(allowed):
             return_value.append(format_allowed_section(section))
     return return_value
 
+def port_sorter(protos):
+  for index, proto in enumerate(protos):
+    ports = proto.get('ports', [])
+    protos[index]['ports'] = sorted(ports)
+  return protos
+
 def sorted_allowed_list(allowed_list):
     """Sort allowed_list (output of format_allowed) by protocol and port."""
     # sort by protocol
     allowed_by_protocol = sorted(allowed_list,key=lambda x: x['IPProtocol'])
 
     # sort the ports list
-    return sorted(allowed_by_protocol, key=lambda y: sorted(y.get('ports', [])))
+    all_sorted = port_sorter(allowed_by_protocol)
+
+    return all_sorted
 
 def check_libcloud():
     # Apache libcloud needs to be installed and at least the minimum version.
