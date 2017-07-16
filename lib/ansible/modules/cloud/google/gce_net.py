@@ -208,7 +208,7 @@ except ImportError:
 from distutils.version import LooseVersion
 import re
 
-from builtins import str # for str() replacement for unicode() 
+from sys import version_info
 
 # import module snippets
 from ansible.module_utils.basic import AnsibleModule
@@ -379,8 +379,16 @@ def check_subnet_parameters(module, gce_connection):
     previous_subnets = []
     for subnet in module.params['subnets']:
         # check length of description (must be less than 2048 characters)
-        if 'description' in subnet and len(str(subnet['description'], "utf-8")) > 2048:
-            msg = "Description must be less thatn 2048 characters in length."
+        print(subnet['description'])
+
+        if 'description' in subnet:
+            if version_info < (3,):
+                description_length = len(unicode(subnet['description'], "utf-8"))
+            else:
+                description_length = len(subnet['description'])
+
+            if description_length > 2048:
+                msg = "Description must be less thatn 2048 characters in length."
 
         # check name
         matches = re.match(name_regexp, subnet['name']);
