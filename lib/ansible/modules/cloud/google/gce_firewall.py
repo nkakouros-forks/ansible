@@ -376,8 +376,9 @@ def sorted_allowed_list(allowed_list):
     """Sort allowed_list (output of format_allowed) by protocol and port."""
     # sort by protocol
     allowed_by_protocol = sorted(allowed_list,key=lambda x: x['IPProtocol'])
+
     # sort the ports list
-    return sorted(allowed_by_protocol, key=lambda y: y.get('ports', []).sort())
+    return sorted(allowed_by_protocol, key=lambda y: sorted(y.get('ports', [])))
 
 def check_libcloud():
     # Apache libcloud needs to be installed and at least the minimum version.
