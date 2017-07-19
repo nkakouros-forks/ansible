@@ -728,7 +728,10 @@ def main():
     if len(passed_subnets):
         if params['mode'] == 'custom':
             for index, subnet in enumerate(passed_subnets):
-                json_output['subnets'][index].update(subnet['extra'])
+                if isinstance(subnet, dict):
+                    json_output['subnets'][index].update(subnet['extra'])
+                else:
+                    json_output['subnets'][index].update(subnet.extra)
 
     module.exit_json(**json_output)
 
