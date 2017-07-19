@@ -94,7 +94,7 @@ notes:
       Eg, a subnet with range: 10.0.0.0/20 and one with range: 10.0.0.0/16 will trigger an errror.
     - Subnets that carry instances cannot be destroyed unless the instances are destroye first. Use M(gce) module for that.
     - Although this module supports check mode, there is one case when check_mode will report inconsistent results.
-      The first is when you try to destroy a subnet that contains instances. This cannot be checked before trying and it is a
+      This is when you try to destroy a subnet that contains instances. This cannot be checked before trying and it is a
       limitation of the Google Cloud API
 '''
 
