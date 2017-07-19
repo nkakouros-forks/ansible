@@ -201,6 +201,9 @@ def check_allowed(allowed_string, module):
     # checks for numerals from 0 to 255 (IP protocol numbers) or the strngs 'icmp', 'ah', 'esp', 'sctp', 'tcp' or 'udp'
     protocol_regex = r"^([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5]|icmp|ah|esp|sctp|tcp|udp)$"
 
+    if allowed_string == 'all':
+        return
+
     if re.match(semicolon_regexp, allowed_string):
         msg = "In option 'allowed', a trailing semicolon is not allowed but one is given."
 
