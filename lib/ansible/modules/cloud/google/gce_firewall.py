@@ -56,16 +56,13 @@ options
         description:
             - The source IPv4 address range that the rule will filter.
             - It must be an array of subnet addresses in CIDR notation, eg 10.0.0.0/17
-            - Mutually exclusive with src_tags.
-        required: true
-        aliases: ['src_cidr']
+            - If both src_ranges and src_tags are empty (or not given), src_ranges defaults to ['0.0.0.0/0']
+        aliases: [src_cidr, src_range]
     src_tags:
         description:
             - Traffic originating from these instances will be filtered through the rule.
             - It must be an array of valid instance tags.
             - Tags will be accepted even if there are no instances with those tags assigned.
-            - Mutually exclusive with src_ranges.
-        required: true
     target_tags:
         description:
             - The target instances that will be protected by this rule.
@@ -402,19 +399,15 @@ def check_libcloud():
         )
 
 def set_empty_defaults(module):
-    # src_ranges and src_tags are mutually_exclusive. So we cannot assign them
-    # default values (of []). This makes them be None when not defined. This causes
-    # problems when comparing with the GCE retrieved values. GCE values return
-    # also as None. But since we may need to do some looping, etc on them, we cast
-    # them (in main()) to [] to avoid exceptions due to None. But then, the src_tags,
-    # src_ranges options are None and comparing them to GCE values will say that they
-    # are not equal and ansible will think that there are state changes when in fact
-    # both GCE and local variables are None, empty.That's why here we assign default
-    # values of [] to the src_ranges and src_tags options as well.
-    if module.params['src_tags'] is None:
-        module.params['src_tags'] = []
-    if module.params['src_ranges'] is None:
-        module.params['src_ranges'] = []
+    # If both src_tags and src_ranges are None (unset), libcloud will set src_ranges
+    # to ['0.0.0.0/0']. Of course, we set both src_tags and src_ranges to []. So,
+    # that will no happen. As a result, the firewall creation will fail when the
+    # request reaches GCE. Here we check if both are [] and set src_ranges to
+    # ['0.0.0.0/0'] like libcloud. We cannot unset the defaults of [] and let the
+    # variables be None because we may need to loop them later in the code, which
+    # would cause errors if they were None.
+    if module.params['src_tags'] == [] and module.params['src_ranges'] == []:
+        module.params['src_ranges'] = ['0.0.0.0/0']
 
     # GCE expects target_tags to be empty in order to apply the rule to all instances.
     # There was a thought to a default of 'all' which makes sense to the users. But
@@ -438,17 +431,14 @@ def main():
         argument_spec = dict(
             name        = dict(required=True, type="str"),
             network     = dict(default='default', type="str"),
-            allowed     = dict(required=True, type="str"),
-            src_ranges  = dict(type='list'),
-            src_tags    = dict(type='list'),
+            allowed     = dict(type="str"),
+            src_ranges  = dict(type='list', default=[], aliases=['src_cidr', 'src_range']),
+            src_tags    = dict(type='list', default=[]),
             target_tags = dict(type='list'),
             state       = dict(default='present', choices=['present', 'absent'], type="str"),
         ),
         required_if = [
-            ('src_ranges', None, ['src_tags'])
-        ],
-        mutually_exclusive = [
-            ['src_ranges', 'src_tags'],
+            ('state', 'present', ['allowed'])
         ],
         supports_check_mode = True,
     )
@@ -461,7 +451,7 @@ def main():
         'name':        module.params['name'],
         'network':     module.params['network'],
         'allowed':     module.params['allowed'],
-        'src_ranges':   module.params['src_ranges'],
+        'src_ranges':  module.params['src_ranges'],
         'src_tags':    module.params['src_tags'],
         'target_tags': module.params['target_tags'],
         'state':       module.params['state'],
@@ -486,6 +476,7 @@ def main():
                 fw = gce.ex_create_firewall(params['name'], allowed_list, network=params['network'],
                     source_ranges=params['src_ranges'], source_tags=params['src_tags'], target_tags=params['target_tags'])
             changed = True
+
         else:
             # If old and new attributes are different, we update the firewall rule.
             # This implicitly lets us clear out attributes as well.
@@ -529,6 +520,7 @@ def main():
                     if sorted(fw.source_tags) != sorted(params['src_tags']):
                         fw.source_tags = params['src_tags']
                         changed = True
+
                 else:
                     fw.source_tags = params['src_tags']
                     changed = True
@@ -542,6 +534,7 @@ def main():
                     if sorted(fw.target_tags) != sorted(params['target_tags']):
                         fw.target_tags = params['target_tags']
                         changed = True
+
                 else:
                     fw.target_tags = params['target_tags']
                     changed = True
