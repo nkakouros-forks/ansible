@@ -277,7 +277,7 @@ def additional_constraint_checks(module):
             msg = "mode is legacy but subnet definitions are given."
 
     if msg:
-        module.fail_json(msg = msg, changed = True)
+        module.fail_json(msg = msg, changed = False)
 
 # The next 4 functions are custom. We did not import ipaddr or ipadress or other
 # libraries because some are unmaintained, python3 incompatible or buggy.
@@ -364,7 +364,7 @@ def check_parameters(module):
             msg = "legacy_range must not have a host id part"
 
     if msg:
-        module.fail_json(msg = msg, changed = True)
+        module.fail_json(msg = msg, changed = False)
 
 def check_subnet_parameters(module, gce_connection):
     msg = ''
@@ -418,7 +418,7 @@ def check_subnet_parameters(module, gce_connection):
             msg = "subnet region is invalid (%s) for subnet '%s'" % (subnet['region'], subnet['name'])
 
     if msg:
-        module.fail_json(msg = msg, changed = True)
+        module.fail_json(msg = msg, changed = False)
 
 def list_gce_subnets(gce_connection):
     gce_subnets = gce_connection.ex_list_subnetworks()
@@ -525,6 +525,13 @@ def main():
                 )
             else:
                 changed = True
+        except Exception as e:
+            # We are wrapping every gce. method in try-except as there are exceptions
+            # that can happen such as timeouts that are not under our contorl.
+            module.fail_json(
+                msg     = str(e),
+                changed = False
+            )
         else:
             # libcloud currently does not support switching a network from auto
             # to custom mode.
@@ -549,7 +556,7 @@ def main():
             gce_subnets = list_gce_subnets(gce)
 
             if  params['subnet_policy'] == 'include_strays':
-                # if there are subnets on GCE that are not mentioned in the argument_spec,
+                # If there are subnets on GCE that are not mentioned in the argument_spec,
                 # we should destroy them before configuring new ones (due to quotas, etc)
                 # So, get all subnet on the target network.
                 gce_nw_subnets = filter_subnets(gce_subnets, network=params['name'])
@@ -568,8 +575,25 @@ def main():
                         except (ResourceInUseError, InvalidRequestError):
                             module.fail_json(
                                 msg = "Destroying subnet %s due to include_strays subnet_policy failed because there are instances running" % gce_nw_subnet.name\
-                                      + "on that subnet. Other changes may have already occured (check if 'changed': 'true' in the return values)."
+                                      + "on that subnet. Other changes may have already occured (check if 'changed': 'true' in the return values).",
+                                changed = changed
                             )
+                        except Exception as e:
+                            if isinstance(gce_nw_subnet, dict):
+                                module.fail_json(
+                                    msg     = "When proccessing subnet %s due to include_strays subnet_policy, an error occured occured. "  % gce_nw_subnet['name']\
+                                              + "Other changes may have already occured (check if 'changed': 'true' in the return values). Error message: "
+                                              + str(e),
+                                    changed = changed
+                                )
+                            else:
+                                module.fail_json(
+                                    msg     = "When proccessing subnet %s due to include_strays subnet_policy, an error occured occured. "  % gce_nw_subnet.name\
+                                              + "Other changes may have already occured (check if 'changed': 'true' in the return values). Error message: "
+                                              + str(e),
+                                    changed = changed
+                                )
+
                         else:
                             changed = True
 
@@ -586,8 +610,15 @@ def main():
                     except InvalidRequestError as e:
                         # probably the supplied cidr conflicts with an existing subnet
                         module.fail_json(
-                            msg     = str(e),
-                            changed = False
+                            msg     = "Creating subnet %s failed. Other changes may have already occured (check if " % subnet['name']\
+                                      + "'changed': 'true' in the return values). Error message: " + str(e),
+                            changed = changed
+                        )
+                    except Exception as e:
+                        module.fail_json(
+                            msg     = "Creating subnet %s failed. Other changes may have already occured (check if " % subnet['name']\
+                                      + "'changed': 'true' in the return values). Error message: " + str(e),
+                            changed = changed
                         )
                     else:
                         changed = True
@@ -631,6 +662,11 @@ def main():
             network = gce.ex_get_network(params['name'])
         except ResourceNotFoundError:
             pass
+        except Exception as e:
+            module.fail_json(
+                msg     = str(e),
+                changed = False
+            )
         else:
             # If the network mode is different to the one specified, the destruction will fail
             if network.mode != params['mode']:
@@ -669,6 +705,12 @@ def main():
                             subnet = gce.ex_get_subnetwork(subnet['name'], region=subnet['region'])
                         except ResourceNotFoundError:
                             pass
+                        except Exception as e:
+                            module.fail_json(
+                                msg     = "Getting subnet %s before destroying failed. Other changes may have already occured (check if " % subnet.name\
+                                          + "'changed': 'true' in the return values). Error message: " + str(e),
+                                changed = changed
+                            )
                         else:
                             try:
                                 gce.ex_destroy_subnetwork(subnet)
@@ -676,10 +718,17 @@ def main():
                             except (ResourceInUseError, InvalidRequestError):
                                 module.fail_json(
                                     msg = "Destroying subnet %s failed because there are instances running on that subnet. " % subnet.name\
-                                          + "Other changes may have already occured (check if 'changed': 'true in the return values)."
+                                          + "Other changes may have already occured (check if 'changed': 'true in the return values).",
+                                    changed = changed
+                                )
+                            except Exception as e:
+                                module.fail_json(
+                                    msg     = "Destroying subnet %s failed. Other changes may have already occured (check if " % subnet.name\
+                                              + "'changed': 'true' in the return values). Error message: " + str(e),
+                                    changed = changed
                                 )
                             else:
-                                change = True
+                                changed = True
 
                         passed_subnets.append(subnet)
 
@@ -689,8 +738,13 @@ def main():
                         try:
                             subnet = gce.ex_get_subnetwork(gce_nw_subnet['name'], region=gce_nw_subnet['region'])
                         except ResourceNotFoundError:
-                            # We will never be in here, but let's leave it for completeness
+                            # We will never be in here due to previous checks, but let's leave it for completeness
                             pass
+                        except Exception as e:
+                            module.fail_json(
+                                msg     = str(e),
+                                changed = False
+                            )
                         else:
                             try:
                                 gce.ex_destroy_subnetwork(subnet)
@@ -698,13 +752,28 @@ def main():
                             except (ResourceInUseError, InvalidRequestError):
                                 module.fail_json(
                                     msg = "Destroying subnet %s failed because there are instances running on that subnet. " % subnet.name\
-                                          + "Other changes may have already occured (check if 'changed': 'true' in the return values)."
+                                          + "Other changes may have already occured (check if 'changed': 'true' in the return values).",
+                                    changed = changed
+                                )
+                            except Exception as e:
+                                module.fail_json(
+                                    msg     = "Destroying subnet %s failed. Other changes may have already occured (check if " % subnet.name\
+                                              + "'changed': 'true' in the return values). Error message: " + str(e),
+                                    changed = changed
                                 )
                             else:
                                 changed = True
 
             # NETWORK
-            gce.ex_destroy_network(network)
+            try:
+                network = gce.ex_destroy_network(network)
+            except Exception as e:
+                module.fail_json(
+                    msg     = "Destroying network %s failed. Other changes may have already occured (check if " % network.name\
+                              + "'changed': 'true' in the return values). Error message: " + str(e),
+                    changed = changed
+                )
+
             changed = True
 
 

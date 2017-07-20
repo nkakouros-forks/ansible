@@ -476,10 +476,22 @@ def main():
         except ResourceNotFoundError:
             # Firewall rule not found so we try to create it.
             if not module.check_mode:
-                fw = gce.ex_create_firewall(params['name'], allowed_list, network=params['network'],
-                    source_ranges=params['src_ranges'], source_tags=params['src_tags'], target_tags=params['target_tags'])
+                try:
+                    fw = gce.ex_create_firewall(params['name'], allowed_list, network=params['network'],
+                        source_ranges=params['src_ranges'], source_tags=params['src_tags'], target_tags=params['target_tags'])
+                except Exception as e:
+                    # We are wrapping every gce. method in try-except as there are exceptions
+                    # that can happen such as timeouts that are not under our control.
+                    module.fail_json(
+                        msg     = str(e),
+                        changed = False
+                    )
             changed = True
-
+        except Exception as e:
+            module.fail_json(
+                msg     = str(e),
+                changed = False
+            )
         else:
             # If old and new attributes are different, we update the firewall rule.
             # This implicitly lets us clear out attributes as well.
@@ -544,7 +556,15 @@ def main():
 
             if changed is True:
                 if not module.check_mode:
-                    fw = gce.ex_update_firewall(fw)
+                    try:
+                        fw = gce.ex_update_firewall(fw)
+                    except Exception as e:
+                        module.fail_json(
+                            msg     = str(e),
+                            changed = False
+                        )
+                # unneeded but given for consinstency
+                changed = True
 
     if params['state'] == 'absent':
         if params['name']:
@@ -553,9 +573,21 @@ def main():
                 fw = gce.ex_get_firewall(params['name'])
             except ResourceNotFoundError:
                 pass
+            except Exception as e:
+                module.fail_json(
+                    msg     = str(e),
+                    changed = False
+                )
+
             if fw:
                 if not module.check_mode:
-                    gce.ex_destroy_firewall(fw)
+                    try:
+                        gce.ex_destroy_firewall(fw)
+                    except Exception as e:
+                        module.fail_json(
+                            msg     = str(e),
+                            changed = False
+                        )
                 changed = True
 
     json_output = {'changed': changed}
