@@ -158,7 +158,6 @@ try:
     from libcloud.common.google import GoogleBaseError, QuotaExceededError, \
         ResourceExistsError, ResourceNotFoundError
 
-    _ = Provider.GCE
     HAS_LIBCLOUD = True
 except ImportError:
     HAS_LIBCLOUD = False
@@ -272,7 +271,8 @@ def check_allowed(allowed_string, module):
                         # that we might have port[0]=abc which is not a valid numeral, this will be caught by
                         # the previous checks but since we haven't failed yet we will reach here and say int(port[0])
                         # which will fail.
-                        msg = "In option 'allowed', the '%s' protocol definition has an invalid port range ('%s-%s', range end is less than range start)." % (allowed, port[0], port[1]) \
+                        msg = "In option 'allowed', the '%s' protocol definition has an invalid port range " \
+                            + "('%s-%s', range end is less than range start)." % (allowed, port[0], port[1]) \
                             + instructions
     if msg:
         module.fail_json(msg=msg, changed=False)
