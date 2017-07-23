@@ -196,8 +196,8 @@ try:
     from libcloud import __version__ as LIBCLOUD_VERSION
     from libcloud.compute.providers import Provider
     from libcloud.common.google import GoogleBaseError, QuotaExceededError, \
-            ResourceExistsError, ResourceNotFoundError, InvalidRequestError, \
-            ResourceInUseError
+        ResourceExistsError, ResourceNotFoundError, InvalidRequestError, \
+        ResourceInUseError
 
     _ = Provider.GCE
     HAS_LIBCLOUD = True
@@ -233,14 +233,15 @@ def check_libs():
     # Apache libcloud needs to be installed and at least the minimum version.
     if not HAS_LIBCLOUD:
         module.fail_json(
-            msg     = 'This module requires Apache libcloud %s or greater' % MINIMUM_LIBCLOUD_VERSION,
-            changed = False
+            msg='This module requires Apache libcloud %s or greater' % MINIMUM_LIBCLOUD_VERSION,
+            changed=False
         )
     elif LooseVersion(LIBCLOUD_VERSION) < MINIMUM_LIBCLOUD_VERSION:
         module.fail_json(
-            msg     = 'This module requires Apache libcloud %s or greater' % MINIMUM_LIBCLOUD_VERSION,
-            changed = False
+            msg='This module requires Apache libcloud %s or greater' % MINIMUM_LIBCLOUD_VERSION,
+            changed=False
         )
+
 
 def check_subnet_spec(module):
     # this will check if all the required subnet option are set on each subnet
@@ -251,9 +252,10 @@ def check_subnet_spec(module):
             subnet['range']
         except KeyError as e:
             module.fail_json(
-                msg     = "mode is custom but the following option for subnet '%s' is missing: %s" % (subnet['name'], str(e)),
-                changed = False
+                msg="mode is custom but the following option for subnet '%s' is missing: %s" % (subnet['name'], str(e)),
+                changed=False
             )
+
 
 def additional_constraint_checks(module):
     msg = ''
@@ -277,7 +279,8 @@ def additional_constraint_checks(module):
             msg = "mode is legacy but subnet definitions are given."
 
     if msg:
-        module.fail_json(msg = msg, changed = False)
+        module.fail_json(msg=msg, changed=False)
+
 
 # The next 4 functions are custom. We did not import ipaddr or ipadress or other
 # libraries because some are unmaintained, python3 incompatible or buggy.
@@ -285,7 +288,7 @@ def get_subnet_id(cidr):
     address, mask = cidr.split('/')
 
     # convert netmask to host mask
-    netmask = (0xffffffff >> (32 - int(mask))) << (32 -int(mask))
+    netmask = (0xffffffff >> (32 - int(mask))) << (32 - int(mask))
 
     # convert address to binary
     address = address.split('.')
@@ -293,8 +296,9 @@ def get_subnet_id(cidr):
         address[index] = "{0:08b}".format(int(part))
     address = ''.join(address)
 
-    network_id = int(address,2) & int(netmask)
+    network_id = int(address, 2) & int(netmask)
     return network_id
+
 
 def get_host_id(cidr):
     address, mask = cidr.split('/')
@@ -307,9 +311,10 @@ def get_host_id(cidr):
     for index, part in enumerate(address):
         address[index] = "{0:08b}".format(int(part))
     address = ''.join(address)
-    host_id = int(address,2) & int(hostmask)
+    host_id = int(address, 2) & int(hostmask)
 
     return host_id
+
 
 def check_subnet_id(cidr):
     # cidr range regexp. Using a regexp to avoid loading extra python dependencies (ipaddr)
@@ -328,6 +333,7 @@ def check_subnet_id(cidr):
 
     return 0
 
+
 def check_overlapping_subnets(subnet1, subnet2):
     subnet_id1 = get_subnet_id(subnet1)
     subnet_id2 = get_subnet_id(subnet2)
@@ -339,18 +345,19 @@ def check_overlapping_subnets(subnet1, subnet2):
 
     return 0
 
+
 def check_parameters(module):
     # All the below checks are performed to allow check_mode to give reliable results.
     # Otherwise, we could handle the exceptions raised by libcloud and skip doing
     # duplicate work here.
-    msg =''
+    msg = ''
 
     # Starts with lowercase letter, contains only lowercase letters, nubmers, hyphens,
     # cannot be empty, cannot end with hyphen. Taken directly for GCE error responses.
     name_regexp = r"(?:[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?)"
 
     # check the firewall rule name.
-    matches = re.match(name_regexp, module.params['name']);
+    matches = re.match(name_regexp, module.params['name'])
     if not matches:
         msg = "Network name must start with a lowercase letter, can contain only lowercase letters, " \
             + "numbers and hyphens, cannot end with a hyphen and cannot be empty."
@@ -364,7 +371,8 @@ def check_parameters(module):
             msg = "legacy_range must not have a host id part"
 
     if msg:
-        module.fail_json(msg = msg, changed = False)
+        module.fail_json(msg=msg, changed=False)
+
 
 def check_subnet_parameters(module, gce_connection):
     msg = ''
@@ -391,9 +399,9 @@ def check_subnet_parameters(module, gce_connection):
                 msg = "Description must be less thatn 2048 characters in length."
 
         # check name
-        matches = re.match(name_regexp, subnet['name']);
+        matches = re.match(name_regexp, subnet['name'])
         if not matches:
-            msg = "Subnet name is invalid for subnet '%s'. Subnet name must start with a lowercase letter, "  % subnet['name'] \
+            msg = "Subnet name is invalid for subnet '%s'. Subnet name must start with a lowercase letter, " % subnet['name'] \
                 + "can contain only lowercase letters, numbers and hyphens, cannot end with a hyphen and cannot be empty."
 
         # check range
@@ -403,7 +411,7 @@ def check_subnet_parameters(module, gce_connection):
         if result == 2:
             msg = "range of subnet %s must not have a host id part" % subnet['name']
 
-        #check overlapping subnets
+        # check overlapping subnets
         if msg == '':
             for previous_subnet in previous_subnets:
                 result = check_overlapping_subnets(subnet['range'], previous_subnet['range'])
@@ -418,37 +426,39 @@ def check_subnet_parameters(module, gce_connection):
             msg = "subnet region is invalid (%s) for subnet '%s'" % (subnet['region'], subnet['name'])
 
     if msg:
-        module.fail_json(msg = msg, changed = False)
+        module.fail_json(msg=msg, changed=False)
+
 
 def list_gce_subnets(gce_connection):
     gce_subnets = gce_connection.ex_list_subnetworks()
 
     results = []
     for gce_subnet in gce_subnets:
-        result                               = dict()
-        result['name']                       = gce_subnet.name
-        result['network']                    = gce_subnet.network.name
-        result['region']                     = gce_subnet.region.name
-        result['range']                      = gce_subnet.cidr
-        result['description']                = gce_subnet.extra['description']
-        result['extra']                      = dict()
+        result = dict()
+        result['name'] = gce_subnet.name
+        result['network'] = gce_subnet.network.name
+        result['region'] = gce_subnet.region.name
+        result['range'] = gce_subnet.cidr
+        result['description'] = gce_subnet.extra['description']
+        result['extra'] = dict()
         result['extra']['creation_time'] = gce_subnet.extra['creationTimestamp']
-        result['extra']['gateway_address']    = gce_subnet.extra['gatewayAddress']
-        result['extra']['self_link']          = gce_subnet.extra['selfLink']
+        result['extra']['gateway_address'] = gce_subnet.extra['gatewayAddress']
+        result['extra']['self_link'] = gce_subnet.extra['selfLink']
         results.append(result)
 
     return results
 
+
 def filter_subnets(subnets, name=None, network=None, region=None, cidr=None):
     if network is not None:
-        subnets = [ subnet for subnet in subnets if subnet['network'] == network ]
+        subnets = [subnet for subnet in subnets if subnet['network'] == network]
     if region is not None:
-        subnets = [ subnet for subnet in subnets if subnet['region'] == region ]
+        subnets = [subnet for subnet in subnets if subnet['region'] == region]
     if cidr is not None:
-        subnets = [ subnet for subnet in subnets if subnet['cidr'] == cidr ]
-        subnets = [ subnet for subnet in subnets if subnet['region'] == region ]
+        subnets = [subnet for subnet in subnets if subnet['cidr'] == cidr]
+        subnets = [subnet for subnet in subnets if subnet['region'] == region]
     if name is not None:
-        subnets = [ subnet for subnet in subnets if subnet['name'] == name ]
+        subnets = [subnet for subnet in subnets if subnet['name'] == name]
 
     return subnets
 
@@ -463,22 +473,22 @@ def main():
     check_libs()
 
     module = AnsibleModule(
-        argument_spec = dict(
-            name                  = dict(required=True, type='str'),
-            mode                  = dict(default='auto', choices=['legacy', 'auto', 'custom'], type='str'),
-            legacy_range          = dict(type='str'),
-            subnets               = dict(type='list'),
-            subnet_policy         = dict(choices=['ignore_strays', 'include_strays'], type='str'),
-            state                 = dict(default='present', choices=['present', 'absent'], type='str'),
+        argument_spec=dict(
+            name=dict(required=True, type='str'),
+            mode=dict(default='auto', choices=['legacy', 'auto', 'custom'], type='str'),
+            legacy_range=dict(type='str'),
+            subnets=dict(type='list'),
+            subnet_policy=dict(choices=['ignore_strays', 'include_strays'], type='str'),
+            state=dict(default='present', choices=['present', 'absent'], type='str'),
         ),
-        required_if = [
+        required_if=[
             ('mode', 'custom', ['subnets', 'subnet_policy']),
             ('mode', 'legacy', ['legacy_range']),
         ],
-        mutually_exclusive = [
+        mutually_exclusive=[
             ['subnets', 'legacy_range'],
         ],
-        supports_check_mode = True,
+        supports_check_mode=True,
     )
 
     # perform further checks on the argument_spec
@@ -492,14 +502,13 @@ def main():
         check_subnet_parameters(module, gce)
 
     params = {
-        'name':          module.params['name'],
-        'mode':          module.params['mode'],
-        'legacy_range':  module.params['legacy_range'],
-        'subnets':       module.params['subnets'],
+        'name': module.params['name'],
+        'mode': module.params['mode'],
+        'legacy_range': module.params['legacy_range'],
+        'subnets': module.params['subnets'],
         'subnet_policy': module.params['subnet_policy'],
-        'state':         module.params['state'],
+        'state': module.params['state'],
     }
-
 
     # the created/deleted/updated network object
     network = None
@@ -514,14 +523,14 @@ def main():
             network = gce.ex_get_network(params['name'])
         except ResourceNotFoundError:
             # user wants to create a new network that doesn't yet exist
-            cidr = params['legacy_range'] if params['mode'] =='legacy' else None
+            cidr = params['legacy_range'] if params['mode'] == 'legacy' else None
             try:
                 network = gce.ex_create_network(params['name'], cidr, mode=params['mode'])
             except InvalidRequestError as e:
                 # probably the supplied cidr was incorrect
                 module.fail_json(
-                    msg     = str(e),
-                    changed = False
+                    msg=str(e),
+                    changed=False
                 )
             else:
                 changed = True
@@ -529,23 +538,23 @@ def main():
             # We are wrapping every gce. method in try-except as there are exceptions
             # that can happen such as timeouts that are not under our contorl.
             module.fail_json(
-                msg     = str(e),
-                changed = False
+                msg=str(e),
+                changed=False
             )
         else:
             # libcloud currently does not support switching a network from auto
             # to custom mode.
             if network.mode == 'auto' and params['mode'] == 'custom':
                 module.fail_json(
-                    msg     = "Currently switching an auto-mode network to custom mode is not supported in Ansible",
-                    changed = False
+                    msg="Currently switching an auto-mode network to custom mode is not supported in Ansible",
+                    changed=False
                 )
 
             # Changing between modes any other way than auto->custom is not supported by GCE
             if network.mode != params['mode']:
                 module.fail_json(
-                    msg     = "Google Cloud does not allow changing from %s mode to %s" % (network.mode, params['mode']),
-                    changed = False
+                    msg="Google Cloud does not allow changing from %s mode to %s" % (network.mode, params['mode']),
+                    changed=False
                 )
 
         # SUBNETS
@@ -555,7 +564,7 @@ def main():
             # gce_ variable prefix below denots stuff on the cloud.
             gce_subnets = list_gce_subnets(gce)
 
-            if  params['subnet_policy'] == 'include_strays':
+            if params['subnet_policy'] == 'include_strays':
                 # If there are subnets on GCE that are not mentioned in the argument_spec,
                 # we should destroy them before configuring new ones (due to quotas, etc)
                 # So, get all subnet on the target network.
@@ -574,24 +583,24 @@ def main():
                         # for some reason libcloud raises InvalidRequestError when is should be raising ResourceInUseError
                         except (ResourceInUseError, InvalidRequestError):
                             module.fail_json(
-                                msg = "Destroying subnet %s due to include_strays subnet_policy failed because there are instances running" % gce_nw_subnet.name\
-                                      + "on that subnet. Other changes may have already occured (check if 'changed': 'true' in the return values).",
-                                changed = changed
+                                msg="Destroying subnet %s due to include_strays subnet_policy failed because there are instances running" % gce_nw_subnet.name \
+                                    + "on that subnet. Other changes may have already occured (check if 'changed': 'true' in the return values).",
+                                changed=changed
                             )
                         except Exception as e:
                             if isinstance(gce_nw_subnet, dict):
                                 module.fail_json(
-                                    msg     = "When proccessing subnet %s due to include_strays subnet_policy, an error occured occured. "  % gce_nw_subnet['name']\
-                                              + "Other changes may have already occured (check if 'changed': 'true' in the return values). Error message: "
-                                              + str(e),
-                                    changed = changed
+                                    msg="When proccessing subnet %s due to include_strays subnet_policy, an error occured occured. " % gce_nw_subnet['name'] \
+                                        + "Other changes may have already occured (check if 'changed': 'true' in the return values). Error message: " \
+                                        + str(e),
+                                    changed=changed
                                 )
                             else:
                                 module.fail_json(
-                                    msg     = "When proccessing subnet %s due to include_strays subnet_policy, an error occured occured. "  % gce_nw_subnet.name\
-                                              + "Other changes may have already occured (check if 'changed': 'true' in the return values). Error message: "
-                                              + str(e),
-                                    changed = changed
+                                    msg="When proccessing subnet %s due to include_strays subnet_policy, an error occured occured. " % gce_nw_subnet.name \
+                                        + "Other changes may have already occured (check if 'changed': 'true' in the return values). Error message: " \
+                                        + str(e),
+                                    changed=changed
                                 )
 
                         else:
@@ -606,19 +615,19 @@ def main():
                 if len(gce_subnet) == 0:
                     try:
                         gce_subnet = gce.ex_create_subnetwork(subnet['name'], cidr=subnet['range'],
-                            network=params['name'], region=subnet['region'], description=subnet['description'])
+                                                              network=params['name'], region=subnet['region'], description=subnet['description'])
                     except InvalidRequestError as e:
                         # probably the supplied cidr conflicts with an existing subnet
                         module.fail_json(
-                            msg     = "Creating subnet %s failed. Other changes may have already occured (check if " % subnet['name']\
-                                      + "'changed': 'true' in the return values). Error message: " + str(e),
-                            changed = changed
+                            msg="Creating subnet %s failed. Other changes may have already occured (check if " % subnet['name'] \
+                                + "'changed': 'true' in the return values). Error message: " + str(e),
+                            changed=changed
                         )
                     except Exception as e:
                         module.fail_json(
-                            msg     = "Creating subnet %s failed. Other changes may have already occured (check if " % subnet['name']\
-                                      + "'changed': 'true' in the return values). Error message: " + str(e),
-                            changed = changed
+                            msg="Creating subnet %s failed. Other changes may have already occured (check if " % subnet['name'] \
+                                + "'changed': 'true' in the return values). Error message: " + str(e),
+                            changed=changed
                         )
                     else:
                         changed = True
@@ -626,8 +635,8 @@ def main():
                 # it exists, but on another network
                 elif gce_subnet[0]['network'] != params['name']:
                     module.fail_json(
-                        msg     = "A subnet named '%s' already exists on another network (%s)." % (subnet['name'], gce_subnet[0]['network']),
-                        changed = False
+                        msg="A subnet named '%s' already exists on another network (%s)." % (subnet['name'], gce_subnet[0]['network']),
+                        changed=False
                     )
                 # it exists on our network, now check if anything has changed
                 else:
@@ -640,16 +649,16 @@ def main():
                     # ie updating the subnet for these options.
                     if gce_subnet['description'] != subnet['description'] or gce_subnet['region'] != subnet['region']:
                         module.fail_json(
-                            msg     = "Google Cloud does not support changing the region or the description of a route.",
-                            changed = False
+                            msg="Google Cloud does not support changing the region or the description of a route.",
+                            changed=False
                         )
 
                     # libcloud currently does not support expanding the subnet.
                     if gce_subnet['range'] != subnet['range']:
                         module.fail_json(
-                            msg     = "Currently, Ansible does not support expanding the subnet range. " + \
-                                      "Other modifications on the subnet range are not allowed by GCE.",
-                            changed = False
+                            msg="Currently, Ansible does not support expanding the subnet range. " \
+                                + "Other modifications on the subnet range are not allowed by GCE.",
+                            changed=False
                         )
 
                     # no_update is possible with libcloud 2.0.0.
@@ -664,16 +673,16 @@ def main():
             pass
         except Exception as e:
             module.fail_json(
-                msg     = str(e),
-                changed = False
+                msg=str(e),
+                changed=False
             )
         else:
             # If the network mode is different to the one specified, the destruction will fail
             if network.mode != params['mode']:
                 module.fail_json(
-                    msg     = "Network %s has a mode of %s on GCE but it is specified in task as mode: %s." \
-                              % (params['name'], network.mode, params['mode']),
-                    changed = False
+                    msg="Network %s has a mode of %s on GCE but it is specified in task as mode: %s." \
+                        % (params['name'], network.mode, params['mode']),
+                    changed=alse
                 )
 
             if params['mode'] == 'custom':
@@ -693,9 +702,9 @@ def main():
                         # If there is even one subnet on GCE that is missing from the argument_spec, then fail.
                         if len(found) != 0:
                             module.fail_json(
-                                msg     = "subnet_policy=ignore_strays but there are subnets on the network '%s' not specified locally "\
-                                          "and destroying the network will fail. Set subnet_policy=include_strays to destroy all subnets regardless.",
-                                changed = False
+                                msg="subnet_policy=ignore_strays but there are subnets on the network '%s' not specified locally " \
+                                    + "and destroying the network will fail. Set subnet_policy=include_strays to destroy all subnets regardless.",
+                                changed=False
                             )
                             break
 
@@ -707,9 +716,9 @@ def main():
                             pass
                         except Exception as e:
                             module.fail_json(
-                                msg     = "Getting subnet %s before destroying failed. Other changes may have already occured (check if " % subnet.name\
-                                          + "'changed': 'true' in the return values). Error message: " + str(e),
-                                changed = changed
+                                msg="Getting subnet %s before destroying failed. Other changes may have already occured (check if " % subnet.name \
+                                    + "'changed': 'true' in the return values). Error message: " + str(e),
+                                changed=changed
                             )
                         else:
                             try:
@@ -717,15 +726,15 @@ def main():
                             # for some reason libcloud raises InvalidRequestError when is should be raising ResourceInUseError
                             except (ResourceInUseError, InvalidRequestError):
                                 module.fail_json(
-                                    msg = "Destroying subnet %s failed because there are instances running on that subnet. " % subnet.name\
-                                          + "Other changes may have already occured (check if 'changed': 'true in the return values).",
-                                    changed = changed
+                                    msg="Destroying subnet %s failed because there are instances running on that subnet. " % subnet.name \
+                                        + "Other changes may have already occured (check if 'changed': 'true in the return values).",
+                                    changed=changed
                                 )
                             except Exception as e:
                                 module.fail_json(
-                                    msg     = "Destroying subnet %s failed. Other changes may have already occured (check if " % subnet.name\
-                                              + "'changed': 'true' in the return values). Error message: " + str(e),
-                                    changed = changed
+                                    msg="Destroying subnet %s failed. Other changes may have already occured (check if " % subnet.name \
+                                        + "'changed': 'true' in the return values). Error message: " + str(e),
+                                    changed=changed
                                 )
                             else:
                                 changed = True
@@ -742,8 +751,8 @@ def main():
                             pass
                         except Exception as e:
                             module.fail_json(
-                                msg     = str(e),
-                                changed = False
+                                msg=str(e),
+                                changed=False
                             )
                         else:
                             try:
@@ -751,15 +760,15 @@ def main():
                             # for some reason libcloud raises InvalidRequestError when is should be raising ResourceInUseError
                             except (ResourceInUseError, InvalidRequestError):
                                 module.fail_json(
-                                    msg = "Destroying subnet %s failed because there are instances running on that subnet. " % subnet.name\
-                                          + "Other changes may have already occured (check if 'changed': 'true' in the return values).",
-                                    changed = changed
+                                    msg="Destroying subnet %s failed because there are instances running on that subnet. " % subnet.name \
+                                        + "Other changes may have already occured (check if 'changed': 'true' in the return values).",
+                                    changed=changed
                                 )
                             except Exception as e:
                                 module.fail_json(
-                                    msg     = "Destroying subnet %s failed. Other changes may have already occured (check if " % subnet.name\
-                                              + "'changed': 'true' in the return values). Error message: " + str(e),
-                                    changed = changed
+                                    msg="Destroying subnet %s failed. Other changes may have already occured (check if " % subnet.name \
+                                        + "'changed': 'true' in the return values). Error message: " + str(e),
+                                    changed=changed
                                 )
                             else:
                                 changed = True
@@ -769,19 +778,17 @@ def main():
                 network = gce.ex_destroy_network(network)
             except Exception as e:
                 module.fail_json(
-                    msg     = "Destroying network %s failed. Other changes may have already occured (check if " % network.name\
-                              + "'changed': 'true' in the return values). Error message: " + str(e),
-                    changed = changed
+                    msg="Destroying network %s failed. Other changes may have already occured (check if " % network.name \
+                        + "'changed': 'true' in the return values). Error message: " + str(e),
+                    changed=changed
                 )
 
             changed = True
 
-
     json_output = {'changed': changed}
     for value in params:
-        if params[value] != None:
+        if params[value] is not None:
             json_output[value] = params[value]
-
 
     # add extra network return values
     extra = dict()

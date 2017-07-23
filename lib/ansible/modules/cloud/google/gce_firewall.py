@@ -156,7 +156,7 @@ try:
     from libcloud import __version__ as LIBCLOUD_VERSION
     from libcloud.compute.providers import Provider
     from libcloud.common.google import GoogleBaseError, QuotaExceededError, \
-            ResourceExistsError, ResourceNotFoundError
+        ResourceExistsError, ResourceNotFoundError
 
     _ = Provider.GCE
     HAS_LIBCLOUD = True
@@ -191,9 +191,9 @@ def check_allowed(allowed_string, module):
 
     msg = ''
     instructions = " NOTE: 'allowed' must be in the form protocol:port. Valid protocols are tcp, "\
-                 + "udp, icmp, ah, esp, sctp or IP protocol nubmers. The :port part is optional "\
-                 + "and valid only for tcp and udp. Multiple protocol:port sequences can be combined "\
-                 + "with semicolons, eg proto1:port1;proto2;proto3:port3-port4. No trailing semicolon is allowed."
+        + "udp, icmp, ah, esp, sctp or IP protocol nubmers. The :port part is optional "\
+        + "and valid only for tcp and udp. Multiple protocol:port sequences can be combined "\
+        + "with semicolons, eg proto1:port1;proto2;proto3:port3-port4. No trailing semicolon is allowed."
 
     # checks for a trailing semicolon
     semicolon_regexp = r"^(.*)[;]$"
@@ -246,7 +246,7 @@ def check_allowed(allowed_string, module):
                     elif not 0 <= int(port) <= 65535:
                         # since port is a string we need to cast it to an integer to make comparisons
                         msg = "In option 'allowed', the '%s' protocol definition has an invalid port ('%s') outside the [0-65535] range." % (allowed, port) \
-                        + instructions
+                            + instructions
 
                 # a port can be a range, like '50-200'
                 if (port.count("-") == 1):
@@ -257,14 +257,14 @@ def check_allowed(allowed_string, module):
                             + instructions
                     elif not (0 <= int(port[1]) <= 65535):
                         msg = "In option 'allowed', the '%s' protocol definition has an invalid port ('%s') outside the [0-65535] range." % (allowed, port[1]) \
-                        + instructions
+                            + instructions
 
                     elif not port[0].isdigit():
                         msg = "In option 'allowed', the '%s' protocol definition has an invalid port ('%s')." % (allowed, port[0]) \
                             + instructions
                     elif not (0 <= int(port[0]) <= 65535):
                         msg = "In option 'allowed', the '%s' protocol definition has an invalid port ('%s') outside the [0-65535] range." % (allowed, port[0]) \
-                        + instructions
+                            + instructions
 
                     # the range end must be larger that the range start, eg 500-33 or 22-22 are invalid
                     if msg == '' and int(port[0]) >= int(port[1]):
@@ -275,14 +275,15 @@ def check_allowed(allowed_string, module):
                         msg = "In option 'allowed', the '%s' protocol definition has an invalid port range ('%s-%s', range end is less than range start)." % (allowed, port[0], port[1]) \
                             + instructions
     if msg:
-        module.fail_json(msg=msg, changed = False)
+        module.fail_json(msg=msg, changed=False)
+
 
 def check_parameter_format(module):
     # All the below checks are performed to allow check_mode to give reliable results.
     # Otherwise, we could handle the exceptions raised by libcloud and skip doing
     # duplicate work here.
 
-    msg =''
+    msg = ''
 
     # Starts with lowercase letter, contains only lowercase letters, nubmers, hyphens,
     # cannot be empty, cannot end with hyphen. Taken directly for GCE error responses.
@@ -292,7 +293,7 @@ def check_parameter_format(module):
     cidr_regexp = r"^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$"
 
     # check the firewall rule name.
-    matches = re.match(name_regexp, module.params['name']);
+    matches = re.match(name_regexp, module.params['name'])
     if not matches:
         msg = "Firewall name must start with a lowercase letter, can contain only lowercase letters, " \
             + "numbers and hyphens, cannot end with a hyphen and cannot be empty."
@@ -328,9 +329,10 @@ def check_parameter_format(module):
                 msg = "src_ranges must be a list of valid cidr ranges, range '%s' is invalid" % cidr
 
     if msg:
-        module.fail_json(msg = msg, changed = False)
+        module.fail_json(msg=msg, changed=False)
 
     check_allowed(module.params['allowed'], module)
+
 
 def check_network_exists(gce_connection, module):
     # if state=absent we do not care if the network exists,
@@ -340,16 +342,17 @@ def check_network_exists(gce_connection, module):
             gce_connection.ex_get_network(module.params['network'])
         except ResourceNotFoundError:
             module.fail_json(
-                msg     = "No network '%s' found." % module.params['network'],
-                changed = False
+                msg="No network '%s' found." % module.params['network'],
+                changed=False
             )
+
 
 def format_allowed_section(allowed):
     """Format each section of the allowed list"""
     if allowed.count(":") == 0:
         protocol = allowed
         ports = []
-    else: # count(":") == 1
+    else:  # count(":") == 1
         protocol, ports = allowed.split(":")
 
     if ports.count(","):
@@ -360,6 +363,7 @@ def format_allowed_section(allowed):
     if ports:
         return_val["ports"] = ports
     return return_val
+
 
 def format_allowed(allowed):
     """Format the 'allowed' value so that it is GCE compatible."""
@@ -372,34 +376,38 @@ def format_allowed(allowed):
             return_value.append(format_allowed_section(section))
     return return_value
 
+
 def port_sorter(protos):
-  for index, proto in enumerate(protos):
-    ports = proto.get('ports', [])
-    protos[index]['ports'] = sorted(ports)
-  return protos
+    for index, proto in enumerate(protos):
+        ports = proto.get('ports', [])
+        protos[index]['ports'] = sorted(ports)
+    return protos
+
 
 def sorted_allowed_list(allowed_list):
     """Sort allowed_list (output of format_allowed) by protocol and port."""
     # sort by protocol
-    allowed_by_protocol = sorted(allowed_list,key=lambda x: x['IPProtocol'])
+    allowed_by_protocol = sorted(allowed_list, key=lambda x: x['IPProtocol'])
 
     # sort the ports list
     all_sorted = port_sorter(allowed_by_protocol)
 
     return all_sorted
 
+
 def check_libcloud():
     # Apache libcloud needs to be installed and at least the minimum version.
     if not HAS_LIBCLOUD:
         module.fail_json(
-            msg     = 'This module requires Apache libcloud %s or greater' % MINIMUM_LIBCLOUD_VERSION,
-            changed = False
+            msg='This module requires Apache libcloud %s or greater' % MINIMUM_LIBCLOUD_VERSION,
+            changed=False
         )
     elif LooseVersion(LIBCLOUD_VERSION) < MINIMUM_LIBCLOUD_VERSION:
         module.fail_json(
-            msg     = 'This module requires Apache libcloud %s or greater' % MINIMUM_LIBCLOUD_VERSION,
-            changed = False
+            msg='This module requires Apache libcloud %s or greater' % MINIMUM_LIBCLOUD_VERSION,
+            changed=False
         )
+
 
 def set_empty_defaults(module):
     # If both src_tags and src_ranges are None (unset), libcloud will set src_ranges
@@ -431,19 +439,19 @@ def main():
     check_libcloud()
 
     module = AnsibleModule(
-        argument_spec = dict(
-            name        = dict(required=True, type="str"),
-            network     = dict(default='default', type="str"),
-            allowed     = dict(type="str"),
-            src_ranges  = dict(type='list', default=[], aliases=['src_cidr', 'src_range']),
-            src_tags    = dict(type='list', default=[]),
-            target_tags = dict(type='list'),
-            state       = dict(default='present', choices=['present', 'absent'], type="str"),
+        argument_spec=dict(
+            name=dict(required=True, type="str"),
+            network=dict(default='default', type="str"),
+            allowed=dict(type="str"),
+            src_ranges=dict(type='list', default=[], aliases=['src_cidr', 'src_range']),
+            src_tags=dict(type='list', default=[]),
+            target_tags=dict(type='list'),
+            state=dict(default='present', choices=['present', 'absent'], type="str"),
         ),
-        required_if = [
+        required_if=[
             ('state', 'present', ['allowed'])
         ],
-        supports_check_mode = True,
+        supports_check_mode=True,
     )
 
     set_empty_defaults(module)
@@ -451,13 +459,13 @@ def main():
     check_parameter_format(module)
 
     params = {
-        'name':        module.params['name'],
-        'network':     module.params['network'],
-        'allowed':     module.params['allowed'],
-        'src_ranges':  module.params['src_ranges'],
-        'src_tags':    module.params['src_tags'],
+        'name': module.params['name'],
+        'network': module.params['network'],
+        'allowed': module.params['allowed'],
+        'src_ranges': module.params['src_ranges'],
+        'src_tags': module.params['src_tags'],
         'target_tags': module.params['target_tags'],
-        'state':       module.params['state'],
+        'state': module.params['state'],
     }
 
     gce = gce_connect(module, PROVIDER)
@@ -478,19 +486,19 @@ def main():
             if not module.check_mode:
                 try:
                     fw = gce.ex_create_firewall(params['name'], allowed_list, network=params['network'],
-                        source_ranges=params['src_ranges'], source_tags=params['src_tags'], target_tags=params['target_tags'])
+                                                source_ranges=params['src_ranges'], source_tags=params['src_tags'], target_tags=params['target_tags'])
                 except Exception as e:
                     # We are wrapping every gce. method in try-except as there are exceptions
                     # that can happen such as timeouts that are not under our control.
                     module.fail_json(
-                        msg     = str(e),
-                        changed = False
+                        msg=str(e),
+                        changed=False
                     )
             changed = True
         except Exception as e:
             module.fail_json(
-                msg     = str(e),
-                changed = False
+                msg=str(e),
+                changed=False
             )
         else:
             # If old and new attributes are different, we update the firewall rule.
@@ -502,8 +510,8 @@ def main():
             # but the use case is extremely limited
             if fw.extra['network_name'] != params['network']:
                 module.fail_json(
-                    msg     = "Changing the network of a rule is not supported.",
-                    changed = False
+                    msg="Changing the network of a rule is not supported.",
+                    changed=False
                 )
 
             # allowed_list
@@ -528,7 +536,7 @@ def main():
 
             # source_tags might be None; cast it to an empty list
             if fw.source_tags is None:
-                 fw.source_tags = []
+                fw.source_tags = []
 
             if fw.source_tags != params['src_tags']:
                 if isinstance(params['src_tags'], list):
@@ -560,8 +568,8 @@ def main():
                         fw = gce.ex_update_firewall(fw)
                     except Exception as e:
                         module.fail_json(
-                            msg     = str(e),
-                            changed = False
+                            msg=str(e),
+                            changed=False
                         )
                 # unneeded but given for consinstency
                 changed = True
@@ -575,8 +583,8 @@ def main():
                 pass
             except Exception as e:
                 module.fail_json(
-                    msg     = str(e),
-                    changed = False
+                    msg=str(e),
+                    changed=False
                 )
 
             if fw:
@@ -585,16 +593,15 @@ def main():
                         gce.ex_destroy_firewall(fw)
                     except Exception as e:
                         module.fail_json(
-                            msg     = str(e),
-                            changed = False
+                            msg=str(e),
+                            changed=False
                         )
                 changed = True
 
     json_output = {'changed': changed}
     for value in params:
-        if params[value] != None:
+        if params[value] is not None:
             json_output[value] = params[value]
-
 
     # add extra return values
     extra = dict()
