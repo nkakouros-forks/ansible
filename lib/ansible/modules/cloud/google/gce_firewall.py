@@ -35,10 +35,10 @@ requirements:
     - "python >= 2.6"
     - "apache-libcloud >= 0.14.0"
 author:
-    - "Eric Johnson (@erjohnso) <erjohnso@google.com>""
+    - "Eric Johnson (@erjohnso) <erjohnso@google.com>"
     - "Tom Melendez (@supertom) <supertom@google.com>"
     - "Nikolaos Kakouros (@tterranigma) <tterranigma@gmail.com>"
-options
+options:
     name:
         description:
             - The name of the firewall rule.
@@ -137,15 +137,15 @@ state:
 
 self_link:
     description: firewall resource uri on GCE
-    returned: always, except when state: absent and rule originally does not exist
+    returned: always, except when I(state=absent) and rule originally does not exist
     type: string
     sample: https://www.googleapis.com/compute/v1/projects/myproject/global/firewalls/myrule
 
 creation_time:
     description: firewall rule creation timestamp
-    returned: always, except when state: absent and rule originally does not exist
+    returned: always, except when I(state=absent) and rule originally does not exist
     type: string
-    sample: 2017-06-28T10:59:59.698-07:00
+    sample: "2017-06-28T10:59:59.698-07:00"
 '''
 
 ################################################################################

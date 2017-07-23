@@ -35,7 +35,7 @@ requirements:
     - "python >= 2.6"
     - "apache-libcloud >= 1.0.0"
 author:
-    - "Eric Johnson (@erjohnso) <erjohnso@google.com>""
+    - "Eric Johnson (@erjohnso) <erjohnso@google.com>"
     - "Tom Melendez (@supertom) <supertom@google.com>"
     - "Nikolaos Kakouros (@tterranigma) <tterranigma@gmail.com>"
 options:
@@ -47,13 +47,14 @@ options:
         version_added: "2.2"
         description:
             - Network mode for Google Cloud.
-            - "legacy" indicates a network with an IP address range.
-            - "auto" automatically generates subnetworks in different regions.
-            - "custom" uses networks to group subnets of user specified IP address ranges.
+            - I(legacy) indicates a network with an IP address range.
+            - I(auto) automatically generates subnetworks in different regions.
+            - I(custom) uses networks to group subnets of user specified IP address ranges.
             - See U(https://cloud.google.com/compute/docs/networking#network_types) for more information.
         choices: ["legacy", "auto", "custom"]
         default: "legacy"
     legacy_range:
+        version_added: "2.4"
         description:
           - The IPv4 address range in CIDR notation for the legacy.
           - Allowed and required when I(mode=legacy)
@@ -62,8 +63,8 @@ options:
         description:
             - A list of the subnets to create on the network.
             - The list is a list of dictionaries, each of which has 3 required options and one optional.
-            - Required options: name, region and range (in cidr notation)
-            - Optional option: description
+            - Required options are I(name), I(region) and I(range) (in cidr notation)
+            - Optional option is I(description)
             - See the examples on how to use them.
             - Google Cloud identifies subnets based on the (subnet-name, region) tuple.
     subnet_policy:
@@ -91,7 +92,7 @@ notes:
     - Google Cloud supports only IPv4 networks.
     - The ip ranges used should be in cidr notation.
     - Subnets in custom mode are not allowed to have overlapping cidr ranges.
-      Eg, a subnet with range: 10.0.0.0/20 and one with range: 10.0.0.0/16 will trigger an errror.
+      Eg, a subnet with I(range=10.0.0.0/20) and one with I(range=10.0.0.0/16) will trigger an errror.
     - Subnets that carry instances cannot be destroyed unless the instances are destroye first. Use M(gce) module for that.
     - Although this module supports check mode, there is one case when check_mode will report inconsistent results.
       This is when you try to destroy a subnet that contains instances. This cannot be checked before trying and it is a
@@ -185,7 +186,7 @@ creation_time:
     description: network creation timestamp
     returned: always
     type: string
-    sample: 2017-06-28T10:59:59.698-07:00
+    sample: "2017-06-28T10:59:59.698-07:00"
 '''
 
 ################################################################################
