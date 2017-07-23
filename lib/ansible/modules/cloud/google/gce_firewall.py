@@ -180,6 +180,7 @@ MINIMUM_LIBCLOUD_VERSION = '0.14.0'
 
 PROVIDER = Provider.GCE
 
+
 ################################################################################
 # Functions
 ################################################################################
@@ -297,18 +298,13 @@ def check_parameter_format(module):
         msg = "Firewall name must start with a lowercase letter, can contain only lowercase letters, " \
             + "numbers and hyphens, cannot end with a hyphen and cannot be empty."
 
-    # check if src_ranges is set when src_tags is not (not covered by AnsibleModule checks)
-    if module.params['src_tags'] is None and module.params['src_ranges'] is None:
-        msg = "missing required arguments: src_ranges"
-
     # check if given source tags are syntactically valid
-    if module.params['src_tags'] is not None:
-        for tag in module.params['src_tags']:
-            matches = re.match(name_regexp, tag)
+    for tag in module.params['src_tags']:
+        matches = re.match(name_regexp, tag)
 
-            if not matches:
-                msg = "Source tags must start with a lowercase letter, can contain only lowercase letters, " \
-                    + "numbers and hyphens, cannot end with a hyphen and cannot be empty."
+        if not matches:
+            msg = "Source tags must start with a lowercase letter, can contain only lowercase letters, " \
+                + "numbers and hyphens, cannot end with a hyphen and cannot be empty."
 
     # check if target tags are syntactically valid
     if module.params['target_tags'] != 'all':
@@ -320,17 +316,17 @@ def check_parameter_format(module):
                     + "numbers and hyphens, cannot end with a hyphen and cannot be empty."
 
     # check if the source range is a valid cidr
-    if module.params['src_ranges'] is not None:
-        for cidr in module.params['src_ranges']:
-            matches = re.match(cidr_regexp, cidr)
+    for cidr in module.params['src_ranges']:
+        matches = re.match(cidr_regexp, cidr)
 
-            if not matches:
-                msg = "src_ranges must be a list of valid cidr ranges, range '%s' is invalid" % cidr
+        if not matches:
+            msg = "src_ranges must be a list of valid cidr ranges, range '%s' is invalid" % cidr
 
     if msg:
         module.fail_json(msg=msg, changed=False)
 
-    check_allowed(module.params['allowed'], module)
+    if module.params['allowed'] is not None:
+        check_allowed(module.params['allowed'], module)
 
 
 def check_network_exists(gce_connection, module):
@@ -419,15 +415,6 @@ def set_empty_defaults(module):
     if module.params['src_tags'] == [] and module.params['src_ranges'] == []:
         module.params['src_ranges'] = ['0.0.0.0/0']
 
-    # GCE expects target_tags to be empty in order to apply the rule to all instances.
-    # There was a thought to a default of 'all' which makes sense to the users. But
-    # this would mean that users would not be able to set an instance tag of 'all'.
-    # if len(module.params['target_tags']) == 1 and module.params['target_tags'][0] == 'all':
-    #     module.params['target_tags'] = []
-    # Instead we make an empty target mean 'all intances', exactly like GCE.
-    if module.params['target_tags'] is None:
-        module.params['target_tags'] = []
-
 
 ################################################################################
 # Main
@@ -444,7 +431,7 @@ def main():
             allowed=dict(type="str"),
             src_ranges=dict(type='list', default=[], aliases=['src_cidr', 'src_range']),
             src_tags=dict(type='list', default=[]),
-            target_tags=dict(type='list'),
+            target_tags=dict(type='list', default=[]),
             state=dict(default='present', choices=['present', 'absent'], type="str"),
         ),
         required_if=[
@@ -574,28 +561,30 @@ def main():
                 changed = True
 
     if params['state'] == 'absent':
-        if params['name']:
-            fw = None
-            try:
-                fw = gce.ex_get_firewall(params['name'])
-            except ResourceNotFoundError:
-                pass
-            except Exception as e:
-                module.fail_json(
-                    msg=str(e),
-                    changed=False
-                )
-
-            if fw:
-                if not module.check_mode:
-                    try:
-                        gce.ex_destroy_firewall(fw)
-                    except Exception as e:
-                        module.fail_json(
-                            msg=str(e),
-                            changed=False
-                        )
-                changed = True
+        try:
+            fw = gce.ex_get_firewall(params['name'])
+        except ResourceNotFoundError:
+            pass
+        except Exception as e:
+            module.fail_json(
+                msg=str(e),
+                changed=False
+            )
+        else:
+            if not module.check_mode:
+                try:
+                    gce.ex_destroy_firewall(fw)
+                except Exception as e:
+                    module.fail_json(
+                        msg=str(e),
+                        changed=False
+                    )
+            params['network'] = fw.extra['network_name']
+            params['src_ranges'] = fw.source_ranges
+            params['src_tags'] = fw.source_tags
+            params['target_tags'] = fw.target_tags
+            params['description'] = fw.extra['description']
+            changed = True
 
     json_output = {'changed': changed}
     for value in params:
