@@ -195,12 +195,11 @@ creation_time:
 
 try:
     from libcloud import __version__ as LIBCLOUD_VERSION
-    from libcloud.compute.providers import Provider
+    from libcloud.compute.types import Provider
     from libcloud.common.google import GoogleBaseError, QuotaExceededError, \
         ResourceExistsError, ResourceNotFoundError, InvalidRequestError, \
         ResourceInUseError
 
-    _ = Provider.GCE
     HAS_LIBCLOUD = True
 except ImportError:
     HAS_LIBCLOUD = False
@@ -224,7 +223,6 @@ from ansible.module_utils.gce import gce_connect
 MINIMUM_LIBCLOUD_VERSION = '1.0.0'
 
 PROVIDER = Provider.GCE
-
 
 ################################################################################
 # Functions
