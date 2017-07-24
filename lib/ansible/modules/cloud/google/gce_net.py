@@ -222,7 +222,12 @@ from ansible.module_utils.gce import gce_connect
 # subnet methods were introduced in 1.0.0
 MINIMUM_LIBCLOUD_VERSION = '1.0.0'
 
-PROVIDER = Provider.GCE
+try:
+    PROVIDER = Provider.GCE
+except NameError:
+    # libcloud may not have been successfully imported. In that case, execution
+    # will stop after check_libs() has been called.
+    pass
 
 
 ################################################################################
