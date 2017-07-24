@@ -222,7 +222,12 @@ from ansible.module_utils.gce import gce_connect
 # subnet methods were introduced in 1.0.0
 MINIMUM_LIBCLOUD_VERSION = '1.0.0'
 
-PROVIDER = Provider.GCE
+try:
+    PROVIDER = Provider.GCE
+except NameError:
+    # libcloud may not have been successfully imported. In that case, execution
+    # will stop after check_libs() has been called.
+    pass
 
 
 ################################################################################
@@ -682,7 +687,7 @@ def main():
                 module.fail_json(
                     msg="Network %s has a mode of %s on GCE but it is specified in task as mode: %s." \
                         % (params['name'], network.mode, params['mode']),
-                    changed=alse
+                    changed=False
                 )
 
             if params['mode'] == 'custom':
@@ -775,7 +780,7 @@ def main():
 
             # NETWORK
             try:
-                network = gce.ex_destroy_network(network)
+                gce.ex_destroy_network(network)
             except Exception as e:
                 module.fail_json(
                     msg="Destroying network %s failed. Other changes may have already occured (check if " % network.name \
