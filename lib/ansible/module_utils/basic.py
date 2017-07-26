@@ -243,10 +243,15 @@ FILE_COMMON_ARGUMENTS = dict(
 
 PASSWD_ARG_RE = re.compile(r'^[-]{0,2}pass[-]?(word|wd)?')
 
-# Can't use 07777 on Python 3, can't use 0o7777 on Python 2.4
-PERM_BITS = int('07777', 8)      # file mode permission bits
-EXEC_PERM_BITS = int('00111', 8)  # execute permission bits
-DEFAULT_PERM = int('0666', 8)    # default file permission bits
+# Used for parsing symbolic file perms
+MODE_OPERATOR_RE = re.compile(r'[+=-]')
+USERS_RE = re.compile(r'[^ugo]')
+PERMS_RE = re.compile(r'[^rwxXstugo]')
+
+
+PERM_BITS = 0o7777       # file mode permission bits
+EXEC_PERM_BITS = 0o0111  # execute permission bits
+DEFAULT_PERM = 0o0666    # default file permission bits
 
 
 def get_platform():
@@ -1011,7 +1016,7 @@ class AnsibleModule(object):
         return context
 
     def user_and_group(self, path, expand=True):
-        b_path = to_bytes(path, errors='surrogate_then_strict')
+        b_path = to_bytes(path, errors='surrogate_or_strict')
         if expand:
             b_path = os.path.expanduser(os.path.expandvars(b_path))
         st = os.lstat(b_path)
@@ -1105,10 +1110,10 @@ class AnsibleModule(object):
         return changed
 
     def set_owner_if_different(self, path, owner, changed, diff=None, expand=True):
-        b_path = to_bytes(path, errors='surrogate_then_strict')
+        b_path = to_bytes(path, errors='surrogate_or_strict')
         if expand:
             b_path = os.path.expanduser(os.path.expandvars(b_path))
-        path = to_text(b_path, errors='surrogate_then_strict')
+        path = to_text(b_path, errors='surrogate_or_strict')
         if owner is None:
             return changed
         orig_uid, orig_gid = self.user_and_group(path, expand)
@@ -1139,10 +1144,10 @@ class AnsibleModule(object):
         return changed
 
     def set_group_if_different(self, path, group, changed, diff=None, expand=True):
-        b_path = to_bytes(path, errors='surrogate_then_strict')
+        b_path = to_bytes(path, errors='surrogate_or_strict')
         if expand:
             b_path = os.path.expanduser(os.path.expandvars(b_path))
-        path = to_text(b_path, errors='surrogate_then_strict')
+        path = to_text(b_path, errors='surrogate_or_strict')
         if group is None:
             return changed
         orig_uid, orig_gid = self.user_and_group(b_path, expand)
@@ -1173,10 +1178,10 @@ class AnsibleModule(object):
         return changed
 
     def set_mode_if_different(self, path, mode, changed, diff=None, expand=True):
-        b_path = to_bytes(path, errors='surrogate_then_strict')
+        b_path = to_bytes(path, errors='surrogate_or_strict')
         if expand:
             b_path = os.path.expanduser(os.path.expandvars(b_path))
-        path = to_text(b_path, errors='surrogate_then_strict')
+        path = to_text(b_path, errors='surrogate_or_strict')
         path_stat = os.lstat(b_path)
 
         if mode is None:
@@ -1253,10 +1258,10 @@ class AnsibleModule(object):
         if attributes is None:
             return changed
 
-        b_path = to_bytes(path, errors='surrogate_then_strict')
+        b_path = to_bytes(path, errors='surrogate_or_strict')
         if expand:
             b_path = os.path.expanduser(os.path.expandvars(b_path))
-        path = to_text(b_path, errors='surrogate_then_strict')
+        path = to_text(b_path, errors='surrogate_or_strict')
 
         existing = self.get_file_attributes(b_path)
 
@@ -1300,28 +1305,53 @@ class AnsibleModule(object):
                 pass
         return output
 
-    def _symbolic_mode_to_octal(self, path_stat, symbolic_mode):
+    @classmethod
+    def _symbolic_mode_to_octal(cls, path_stat, symbolic_mode):
+        """
+        This enables symbolic chmod string parsing as stated in the chmod man-page
+
+        This includes things like: "u=rw-x+X,g=r-x+X,o=r-x+X"
+        """
+
         new_mode = stat.S_IMODE(path_stat.st_mode)
 
-        mode_re = re.compile(r'^(?P<users>[ugoa]+)(?P<operator>[-+=])(?P<perms>[rwxXst-]*|[ugo])$')
+        # Now parse all symbolic modes
         for mode in symbolic_mode.split(','):
-            match = mode_re.match(mode)
-            if match:
-                users = match.group('users')
-                operator = match.group('operator')
-                perms = match.group('perms')
+            # Per single mode. This always contains a '+', '-' or '='
+            # Split it on that
+            permlist = MODE_OPERATOR_RE.split(mode)
 
-                if users == 'a':
-                    users = 'ugo'
+            # And find all the operators
+            opers = MODE_OPERATOR_RE.findall(mode)
+
+            # The user(s) where it's all about is the first element in the
+            # 'permlist' list. Take that and remove it from the list.
+            # An empty user or 'a' means 'all'.
+            users = permlist.pop(0)
+            use_umask = (users == '')
+            if users == 'a' or users == '':
+                users = 'ugo'
+
+            # Check if there are illegal characters in the user list
+            # They can end up in 'users' because they are not split
+            if USERS_RE.match(users):
+                raise ValueError("bad symbolic permission for mode: %s" % mode)
+
+            # Now we have two list of equal length, one contains the requested
+            # permissions and one with the corresponding operators.
+            for idx, perms in enumerate(permlist):
+                # Check if there are illegal characters in the permissions
+                if PERMS_RE.match(perms):
+                    raise ValueError("bad symbolic permission for mode: %s" % mode)
 
                 for user in users:
-                    mode_to_apply = self._get_octal_mode_from_symbolic_perms(path_stat, user, perms)
-                    new_mode = self._apply_operation_to_mode(user, operator, mode_to_apply, new_mode)
-            else:
-                raise ValueError("bad symbolic permission for mode: %s" % mode)
+                    mode_to_apply = cls._get_octal_mode_from_symbolic_perms(path_stat, user, perms, use_umask)
+                    new_mode = cls._apply_operation_to_mode(user, opers[idx], mode_to_apply, new_mode)
+
         return new_mode
 
-    def _apply_operation_to_mode(self, user, operator, mode_to_apply, current_mode):
+    @staticmethod
+    def _apply_operation_to_mode(user, operator, mode_to_apply, current_mode):
         if operator == '=':
             if user == 'u':
                 mask = stat.S_IRWXU | stat.S_ISUID
@@ -1339,12 +1369,20 @@ class AnsibleModule(object):
             new_mode = current_mode - (current_mode & mode_to_apply)
         return new_mode
 
-    def _get_octal_mode_from_symbolic_perms(self, path_stat, user, perms):
+    @staticmethod
+    def _get_octal_mode_from_symbolic_perms(path_stat, user, perms, use_umask):
         prev_mode = stat.S_IMODE(path_stat.st_mode)
 
         is_directory = stat.S_ISDIR(path_stat.st_mode)
         has_x_permissions = (prev_mode & EXEC_PERM_BITS) > 0
         apply_X_permission = is_directory or has_x_permissions
+
+        # Get the umask, if the 'user' part is empty, the effect is as if (a) were
+        # given, but bits that are set in the umask are not affected.
+        # We also need the "reversed umask" for masking
+        umask = os.umask(0)
+        os.umask(umask)
+        rev_umask = umask ^ PERM_BITS
 
         # Permission bits constants documented at:
         # http://docs.python.org/2/library/stat.html#stat.S_ISUID
@@ -1363,35 +1401,32 @@ class AnsibleModule(object):
 
         user_perms_to_modes = {
             'u': {
-                'r': stat.S_IRUSR,
-                'w': stat.S_IWUSR,
-                'x': stat.S_IXUSR,
+                'r': rev_umask & stat.S_IRUSR if use_umask else stat.S_IRUSR,
+                'w': rev_umask & stat.S_IWUSR if use_umask else stat.S_IWUSR,
+                'x': rev_umask & stat.S_IXUSR if use_umask else stat.S_IXUSR,
                 's': stat.S_ISUID,
                 't': 0,
                 'u': prev_mode & stat.S_IRWXU,
                 'g': (prev_mode & stat.S_IRWXG) << 3,
-                'o': (prev_mode & stat.S_IRWXO) << 6,
-            },
+                'o': (prev_mode & stat.S_IRWXO) << 6},
             'g': {
-                'r': stat.S_IRGRP,
-                'w': stat.S_IWGRP,
-                'x': stat.S_IXGRP,
+                'r': rev_umask & stat.S_IRGRP if use_umask else stat.S_IRGRP,
+                'w': rev_umask & stat.S_IWGRP if use_umask else stat.S_IWGRP,
+                'x': rev_umask & stat.S_IXGRP if use_umask else stat.S_IXGRP,
                 's': stat.S_ISGID,
                 't': 0,
                 'u': (prev_mode & stat.S_IRWXU) >> 3,
                 'g': prev_mode & stat.S_IRWXG,
-                'o': (prev_mode & stat.S_IRWXO) << 3,
-            },
+                'o': (prev_mode & stat.S_IRWXO) << 3},
             'o': {
-                'r': stat.S_IROTH,
-                'w': stat.S_IWOTH,
-                'x': stat.S_IXOTH,
+                'r': rev_umask & stat.S_IROTH if use_umask else stat.S_IROTH,
+                'w': rev_umask & stat.S_IWOTH if use_umask else stat.S_IWOTH,
+                'x': rev_umask & stat.S_IXOTH if use_umask else stat.S_IXOTH,
                 's': 0,
                 't': stat.S_ISVTX,
                 'u': (prev_mode & stat.S_IRWXU) >> 6,
                 'g': (prev_mode & stat.S_IRWXG) >> 3,
-                'o': prev_mode & stat.S_IRWXO,
-            }
+                'o': prev_mode & stat.S_IRWXO},
         }
 
         # Insert X_perms into user_perms_to_modes

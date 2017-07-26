@@ -418,7 +418,7 @@ class PlayContext(Base):
                     if sudo_pass_name in variables:
                         setattr(new_info, 'become_pass', variables[sudo_pass_name])
                         break
-            if new_info.become_method == 'sudo':
+            elif new_info.become_method == 'su':
                 for su_pass_name in MAGIC_VARIABLE_MAPPING.get('su_pass'):
                     if su_pass_name in variables:
                         setattr(new_info, 'become_pass', variables[su_pass_name])
@@ -454,9 +454,6 @@ class PlayContext(Base):
         # set no_log to default if it was not previouslly set
         if new_info.no_log is None:
             new_info.no_log = C.DEFAULT_NO_LOG
-
-        # set become defaults if not previouslly set
-        task.set_become_defaults(new_info.become, new_info.become_method, new_info.become_user)
 
         if task.always_run:
             display.deprecated("always_run is deprecated. Use check_mode = no instead.", version="2.4", removed=False)
