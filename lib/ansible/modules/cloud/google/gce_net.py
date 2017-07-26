@@ -395,7 +395,7 @@ def check_subnet_parameters(module, gce_connection):
 
         if 'description' in subnet:
             if version_info < (3,):
-                description_length = len(unicode(subnet['description'], "utf-8"))
+                description_length = len(unicode(subnet['description'], "utf-8"))  # pylint: disable=E0602
             else:
                 description_length = len(subnet['description'])
 
