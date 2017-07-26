@@ -196,8 +196,7 @@ creation_time:
 try:
     from libcloud import __version__ as LIBCLOUD_VERSION
     from libcloud.compute.types import Provider
-    from libcloud.common.google import GoogleBaseError, QuotaExceededError, \
-        ResourceExistsError, ResourceNotFoundError, InvalidRequestError, \
+    from libcloud.common.google import ResourceNotFoundError, InvalidRequestError, \
         ResourceInUseError
 
     HAS_LIBCLOUD = True
@@ -234,7 +233,7 @@ except NameError:
 # Functions
 ################################################################################
 
-def check_libs():
+def check_libs(module):
     # Apache libcloud needs to be installed and at least the minimum version.
     if not HAS_LIBCLOUD:
         module.fail_json(
@@ -475,8 +474,6 @@ def filter_subnets(subnets, name=None, network=None, region=None, cidr=None):
 def main():
     changed = False
 
-    check_libs()
-
     module = AnsibleModule(
         argument_spec=dict(
             name=dict(required=True, type='str'),
@@ -495,6 +492,8 @@ def main():
         ],
         supports_check_mode=True,
     )
+
+    check_libs(module)
 
     # perform further checks on the argument_spec
     additional_constraint_checks(module)

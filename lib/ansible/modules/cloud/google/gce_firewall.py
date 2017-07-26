@@ -155,8 +155,7 @@ creation_time:
 try:
     from libcloud import __version__ as LIBCLOUD_VERSION
     from libcloud.compute.types import Provider
-    from libcloud.common.google import GoogleBaseError, QuotaExceededError, \
-        ResourceExistsError, ResourceNotFoundError
+    from libcloud.common.google import ResourceNotFoundError
 
     HAS_LIBCLOUD = True
 except ImportError:
@@ -399,7 +398,7 @@ def sorted_allowed_list(allowed_list):
     return all_sorted
 
 
-def check_libcloud():
+def check_libcloud(module):
     # Apache libcloud needs to be installed and at least the minimum version.
     if not HAS_LIBCLOUD:
         module.fail_json(
@@ -431,7 +430,6 @@ def set_empty_defaults(module):
 
 def main():
     changed = False
-    check_libcloud()
 
     module = AnsibleModule(
         argument_spec=dict(
@@ -448,6 +446,8 @@ def main():
         ],
         supports_check_mode=True,
     )
+
+    check_libcloud(module)
 
     set_empty_defaults(module)
 
