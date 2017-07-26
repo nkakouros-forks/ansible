@@ -1,6 +1,4 @@
 #!/usr/bin/python
-<<<<<<< HEAD
-=======
 #
 # This file is part of Ansible
 #
@@ -16,7 +14,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
->>>>>>> gce_route
 
 ANSIBLE_METADATA = {'metadata_version': '1.0',
                     'status': ['preview'],
@@ -493,7 +490,7 @@ def main():
                     if gce_route.extra['nextHopIp'] != params['next_hop']:
                         changed = True
                 gce_route.next_hop = params['next_hop']
-            else: # next_hop is an instance name (last case of the three possible for next_hop)
+            else:  # next_hop is an instance name (last case of the three possible for next_hop)
                 try:
                     # We extract the instance name from the instance resource uri
                     # (eg projects/myproject/zones/europe-west1-b/instances/my-instance).
