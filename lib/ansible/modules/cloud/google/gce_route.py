@@ -192,15 +192,13 @@ try:
     from libcloud import __version__ as LIBCLOUD_VERSION
     from libcloud.compute.types import Provider
     from libcloud.compute.providers import Provider
-    from libcloud.common.google import GoogleBaseError, QuotaExceededError, \
-        ResourceExistsError, ResourceInUseError, ResourceNotFoundError
+    from libcloud.common.google import ResourceNotFoundError
 
     HAS_LIBCLOUD = True
 except ImportError:
     HAS_LIBCLOUD = False
 
 # module specific imports
-import socket
 import re
 from distutils.version import LooseVersion
 from sys import version_info
@@ -229,7 +227,7 @@ except NameError:
 # Functions
 ################################################################################
 
-def check_libcloud():
+def check_libcloud(module):
     # Apache libcloud needs to be installed and at least the minimum version.
     if not HAS_LIBCLOUD:
         module.fail_json(
@@ -271,14 +269,13 @@ def check_parameter_format(module, gce_connection):
             + "numbers and hyphens, cannot end with a hyphen and cannot be empty."
 
     # check length of description (must be less than 2048 characters)
-    if len(unicode(module.params['description'], "utf-8")) > 2048:
-        if version_info < (3,):
-            description_length = len(unicode(module.params['description'], "utf-8"))
-        else:
-            description_length = len(module.params['description'])
+    if version_info < (3,):
+        description_length = len(unicode(module.params['description'], "utf-8"))  # pylint: disable=E0602
+    else:
+        description_length = len(module.params['description'])
 
-        if description_length > 2048:
-            msg = "Description must be less thatn 2048 characters in length."
+    if description_length > 2048:
+        msg = "Description must be less thatn 2048 characters in length."
 
     # check instance tags for valid tags
     if module.params['instance_tags']:
@@ -314,7 +311,7 @@ def check_parameter_format(module, gce_connection):
             msg = 'next_hop is a valid instance name but no node with this name exists'
     # case 3: ip address. This is the last valid case. If matching it fails, then
     # user has supplied garbage in the next_hop option.
-    elif not re.match(ipaddr_regexp, module.params[next_hop]):
+    elif not re.match(ipaddr_regexp, module.params['next_hop']):
         msg = 'next_hop is invalid'
 
     # exit
@@ -344,8 +341,6 @@ def check_network_exists(gce_connection, module):
 def main():
     changed = False
 
-    check_libcloud()
-
     module = AnsibleModule(
         argument_spec=dict(
             name=dict(required=True),
@@ -359,6 +354,8 @@ def main():
         ),
         supports_check_mode=True
     )
+
+    check_libcloud(module)
 
     gce = gce_connect(module, PROVIDER)
 
